@@ -11,6 +11,8 @@ const lessonModules = import.meta.glob<{ default: unknown }>("/content/sections/
 const sectionsBySectionId = new Map<string, Section>();
 const lessonsByLessonId = new Map<string, Lesson>();
 const sectionIdByLessonId = new Map<string, string>();
+const lessonDirByLessonId = new Map<string, string>();
+const lessonByPathKey = new Map<string, Lesson>();
 
 const parseErrors: Array<{ path: string; error: unknown }> = [];
 
@@ -31,15 +33,18 @@ for (const [path, mod] of Object.entries(lessonModules)) {
   }
   lessonsByLessonId.set(parsed.data.id, parsed.data);
 
-  const match = path.match(/\/content\/sections\/([^/]+)\//);
+  const match = path.match(/\/content\/sections\/([^/]+)\/([^/]+)\//);
   if (match) {
-    sectionIdByLessonId.set(parsed.data.id, match[1]);
+    const sectionId = match[1];
+    const dirName = match[2];
+    sectionIdByLessonId.set(parsed.data.id, sectionId);
+    lessonDirByLessonId.set(parsed.data.id, dirName);
+    lessonByPathKey.set(`${sectionId}/${dirName}`, parsed.data);
   }
 }
 
 if (parseErrors.length > 0 && import.meta.dev) {
   for (const { path, error } of parseErrors) {
-     
     console.error(`[content] failed to parse ${path}`, error);
   }
   throw new Error(
@@ -65,4 +70,23 @@ export function getAllLessons(): Lesson[] {
 
 export function getSectionIdForLesson(lessonId: string): string | undefined {
   return sectionIdByLessonId.get(lessonId);
+}
+
+export function getLessonDir(lessonId: string): string | undefined {
+  return lessonDirByLessonId.get(lessonId);
+}
+
+export function getLessonByPath(sectionId: string, dirName: string): Lesson | undefined {
+  return lessonByPathKey.get(`${sectionId}/${dirName}`);
+}
+
+export function getLessonsForSection(sectionId: string): Lesson[] {
+  const section = sectionsBySectionId.get(sectionId);
+  if (!section) return [];
+  const lessons: Lesson[] = [];
+  for (const dirName of section.lessons) {
+    const lesson = lessonByPathKey.get(`${sectionId}/${dirName}`);
+    if (lesson) lessons.push(lesson);
+  }
+  return lessons;
 }

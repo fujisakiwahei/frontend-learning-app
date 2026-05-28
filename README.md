@@ -1,1 +1,1 @@
-# frontend-learning-app
+# architecture_etc

@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import BottomNav from "~/components/nav/BottomNav.vue";
+
 const route = useRoute();
-const showBottomNav = computed(() => !route.path.startsWith("/lesson"));
+const showBottomNav = computed(
+  () => !route.path.startsWith("/lesson") && !route.path.startsWith("/review")
+);
 </script>
 
 <template>
