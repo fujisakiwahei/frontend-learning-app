@@ -44,7 +44,7 @@ const { data: html } = await useAsyncData(key.value, () => renderMarkdown(props.
 .markdown-block :deep(code) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.95em;
-  background: var(--color-surface);
+  background: #e4e4e4;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
 }
@@ -54,7 +54,7 @@ const { data: html } = await useAsyncData(key.value, () => renderMarkdown(props.
   padding: var(--space-4);
   border-radius: var(--radius-md);
   overflow-x: auto;
-  background: var(--color-surface);
+  background: #e4e4e4 !important;
   font-size: 14px;
   line-height: 1.6;
 }
