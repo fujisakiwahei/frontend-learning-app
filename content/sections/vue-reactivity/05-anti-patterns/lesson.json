@@ -1,0 +1,299 @@
+{
+  "id": "vue-reactivity.anti-patterns",
+  "version": 1,
+  "title": "リアクティビティを壊すアンチパターン",
+  "estimatedMinutes": 7,
+  "tags": ["vue3", "reactivity", "anti-pattern"],
+  "prerequisites": ["vue-reactivity.ref-vs-reactive", "vue-reactivity.computed-vs-watch"],
+
+  "intro": {
+    "headline": "「動かない」の正体はだいたい同じ",
+    "body": "Vue 3 のリアクティビティが効かなくなる原因は、ほぼ「Proxy を抜けてしまっている」か「依存追跡されない場所で読んでいる」かのどちらかに帰着します。具体的には reactive の分割代入、関数への素のプロパティ渡し、reactive の再代入、watch のソース指定ミスなどが頻出。パターンを覚えれば「なぜ画面が更新されないか」を読み解けるようになります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "reactive の分割代入はリアクティビティを切る",
+      "body": "`const { count } = reactive({ count: 0 })` のように分割代入すると、`count` はその時点のプリミティブ値（0）になり、元の Proxy との繋がりが失われます。以降 `count++` してもテンプレートには反映されません。\n\n分割代入したまま反応性を保ちたいときは `toRefs` で各プロパティを ref にラップします。あるいは元の reactive を経由してアクセスする（`state.count` のまま使う）方針にします。",
+      "code": {
+        "lang": "ts",
+        "src": "import { reactive, toRefs } from 'vue'\n\nconst state = reactive({ count: 0, name: 'x' })\n\n// ❌ ただの number になる\nconst { count } = state\ncount // 0\nstate.count++\ncount // 0（無関係になっている）\n\n// ✅ toRefs で個別の ref に\nconst { count: countRef, name } = toRefs(state)\ncountRef.value // 0\nstate.count++\ncountRef.value // 1"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Limitations of reactive() — Destructure",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#limitations-of-reactive"
+        },
+        {
+          "title": "Vue.js — toRefs()",
+          "url": "https://vuejs.org/api/reactivity-utilities.html#torefs"
+        }
+      ]
+    },
+    {
+      "heading": "関数に reactive のプロパティを直接渡すと値しか伝わらない",
+      "body": "`useFoo(state.count)` のように reactive オブジェクトの **プロパティ値そのもの** を関数に渡すと、関数の中ではただの数値になり、元の reactive への追跡は途切れます。コンポーザブルとしてリアクティブに扱いたいときは、ref を渡すか、`computed`／`toRef` でラップして渡します。\n\n同じ理由で `props` から分割代入したものも反応性を失います。Vue 3.5+ の Reactive Props Destructure を使う場合のみ例外的に許容されますが、明示的に使う設定（defineProps の destructuring）か、それ以外では `props.foo` のまま参照するのが安全です。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ ただの数値が渡る\nuseDoubled(state.count)\n\n// ✅ ref を渡す or computed で包む\nimport { toRef, computed } from 'vue'\nuseDoubled(toRef(state, 'count'))\nuseDoubled(computed(() => state.count))"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — toRef()",
+          "url": "https://vuejs.org/api/reactivity-utilities.html#toref"
+        },
+        {
+          "title": "Vue.js — Reactive Props Destructure",
+          "url": "https://vuejs.org/guide/components/props.html#reactive-props-destructure"
+        }
+      ]
+    },
+    {
+      "heading": "watch のソースは「読まれるべき式」で渡す",
+      "body": "`watch` の第 1 引数には ref / reactive / getter のいずれかを渡せます。reactive のプロパティを「値」として渡してしまうと依存が捕捉できず、ソース型の不一致になります。プロパティを監視したいときは getter（関数）で渡すのが基本です。\n\nまた、`watch(state, cb)` のように reactive 全体を渡すと自動的に deep watcher になります。深いオブジェクトでは毎回全体走査するため、特定プロパティだけ気にするなら getter で絞るほうが速くて意図も明確です。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ 値を渡している（数値は監視できない）\nwatch(state.count, (n) => console.log(n))\n\n// ✅ getter で渡す\nwatch(() => state.count, (n) => console.log(n))\n\n// ✅ ref 自体を渡す\nwatch(myRef, (n) => console.log(n))"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Watch Source Types",
+          "url": "https://vuejs.org/guide/essentials/watchers.html#watch-source-types"
+        }
+      ]
+    },
+    {
+      "heading": "readonly はリアクティブを残したまま書き込みを禁じる",
+      "body": "コンポーザブルから状態を返すとき、外から書き換えられたくないなら `readonly(ref/reactive)` でラップして公開します。読み取りはリアクティブのまま、書き込みは開発時に警告が出ます。書き込み窓口は同時に export した「専用のアクション関数」に絞ることで、状態変化の経路をひとつに集約できます。\n\nなお、`readonly` は深い読み取り専用ラッパで、`shallowReadonly` を使えば 1 階層だけに留めることもできます。",
+      "code": {
+        "lang": "ts",
+        "src": "import { ref, readonly } from 'vue'\n\nfunction useCounter() {\n  const count = ref(0)\n  const inc = () => count.value++\n  return { count: readonly(count), inc }\n}\n\nconst { count, inc } = useCounter()\ncount.value++ // 開発時に警告（値は変わらない）\ninc()         // 正規ルート"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — readonly()",
+          "url": "https://vuejs.org/api/reactivity-core.html#readonly"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードを実行した直後、画面上の <p>{{ count }}</p> はどう変化する？",
+      "code": {
+        "lang": "vue",
+        "src": "<script setup lang=\"ts\">\nimport { reactive } from 'vue'\nconst state = reactive({ count: 0 })\nconst { count } = state\nfunction inc() { state.count++ }\n</script>\n\n<template>\n  <p>{{ count }}</p>\n  <button @click=\"inc\">+1</button>\n</template>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "クリックのたびに 1 ずつ増える",
+          "isCorrect": false,
+          "explanation": "テンプレ内の {{ count }} は分割代入したプリミティブを参照しているため反応しない。"
+        },
+        {
+          "id": "b",
+          "label": "0 のまま動かない",
+          "isCorrect": true,
+          "explanation": "正解。const { count } で取り出した時点の値（0）がテンプレートに固定される。state.count を書き換えても count 変数は別物。"
+        },
+        {
+          "id": "c",
+          "label": "クリックすると undefined になる",
+          "isCorrect": false,
+          "explanation": "count は number 0 のまま。undefined にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "実行時エラーになる",
+          "isCorrect": false,
+          "explanation": "構文的にも実行時にもエラーは出ない。挙動だけが期待外れになる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Limitations of reactive()",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#limitations-of-reactive"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで watch のコールバックが実行される回数は？（state.n を 0 → 1 → 2 と書き換える）",
+      "code": {
+        "lang": "ts",
+        "src": "import { reactive, watch } from 'vue'\nconst state = reactive({ n: 0 })\nwatch(state.n, (v) => console.log(v))\nstate.n = 1\nstate.n = 2"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "2 回（変更のたびに呼ばれる）",
+          "isCorrect": false,
+          "explanation": "watch(state.n, ...) は数値 0 を渡しているのと同じ。プリミティブは監視できない。"
+        },
+        {
+          "id": "b",
+          "label": "0 回（ソース指定が不正で監視自体が成立しない）",
+          "isCorrect": true,
+          "explanation": "正解。state.n は数値 0 として評価され、watch のソース型に合わない。getter を使い watch(() => state.n, cb) と書くのが正しい。"
+        },
+        {
+          "id": "c",
+          "label": "1 回（初回のみ）",
+          "isCorrect": false,
+          "explanation": "immediate オプションも付いておらず、ソース自体が無効なので呼ばれない。"
+        },
+        {
+          "id": "d",
+          "label": "実行時に throw する",
+          "isCorrect": false,
+          "explanation": "throw はせず、開発時に「invalid watch source」の警告が出る挙動。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Watch Source Types",
+          "url": "https://vuejs.org/guide/essentials/watchers.html#watch-source-types"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "コンポーザブルから「リアクティブな値を返す + 外から書き換えさせない」設計をしたい。最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "return { count: readonly(count), inc }",
+          "isCorrect": true,
+          "explanation": "正解。読み取りはリアクティブのまま、書き込みは inc に集約。状態変化の経路が一本化される。"
+        },
+        {
+          "id": "b",
+          "label": "return { count: count.value, inc }",
+          "isCorrect": false,
+          "explanation": "count.value はその時点の数値。リアクティビティが切れる。"
+        },
+        {
+          "id": "c",
+          "label": "return { ...state }（reactive を分割して返す）",
+          "isCorrect": false,
+          "explanation": "分割代入で Proxy から値が切れる。toRefs しない限りリアクティビティが失われる。"
+        },
+        {
+          "id": "d",
+          "label": "return Object.freeze({ count })",
+          "isCorrect": false,
+          "explanation": "freeze は新しいプロパティの追加を禁じるが、ref オブジェクトの value への代入は防げない。意図にも合わない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — readonly()",
+          "url": "https://vuejs.org/api/reactivity-core.html#readonly"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "reactive オブジェクトの一部プロパティをコンポーザブルに渡したい。最も適切な書き方は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "useFoo(toRef(state, 'count'))",
+          "isCorrect": true,
+          "explanation": "正解。toRef は元のプロパティと連動した ref を作る。書き換えも双方向に反映でき、reactive のリアクティビティを保ったまま渡せる。"
+        },
+        {
+          "id": "b",
+          "label": "useFoo(state.count)",
+          "isCorrect": false,
+          "explanation": "値だけが渡る。コンポーザブル側で「リアクティブな値」として扱えない。"
+        },
+        {
+          "id": "c",
+          "label": "useFoo({ ...state })",
+          "isCorrect": false,
+          "explanation": "スプレッドした時点でリアクティブな繋がりは消える。"
+        },
+        {
+          "id": "d",
+          "label": "useFoo(reactive({ count: state.count }))",
+          "isCorrect": false,
+          "explanation": "新しい reactive を作っており、元の state とは無関係になる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — toRef()",
+          "url": "https://vuejs.org/api/reactivity-utilities.html#toref"
+        }
+      ]
+    },
+    {
+      "id": "ex5",
+      "type": "code-reading-4choice",
+      "prompt": "次のうち「リアクティビティが効かない」コードはどれ？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "const x = ref(1); x.value++ → テンプレ {{ x }} は更新される",
+          "isCorrect": false,
+          "explanation": "ref はトップレベルなら自動 unwrap される。正しく更新される。"
+        },
+        {
+          "id": "b",
+          "label": "const s = reactive({ n: 1 }); s.n++ → テンプレ {{ s.n }} は更新される",
+          "isCorrect": false,
+          "explanation": "reactive のプロパティ書き換えは Proxy のセットトラップ経由で正常に反応する。"
+        },
+        {
+          "id": "c",
+          "label": "let s = reactive({ n: 1 }); s = reactive({ n: 2 }) → テンプレ {{ s.n }} は更新される",
+          "isCorrect": true,
+          "explanation": "正解（＝効かないコード）。reactive 自体の再代入は Proxy の参照が差し変わり、テンプレートは元の Proxy を見ているため反映されない。"
+        },
+        {
+          "id": "d",
+          "label": "const c = computed(() => s.n * 2) → s.n を変えると c も更新される",
+          "isCorrect": false,
+          "explanation": "computed は依存追跡で正しく更新される。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Limitations of reactive()",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#limitations-of-reactive"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "reactive の分割代入 / プロパティを値として渡す / 再代入はリアクティビティを切る",
+      "切れた繋がりを回復するには toRefs / toRef / ref / computed のいずれかでラップする",
+      "watch のソースは ref か getter で渡す。reactive のプロパティ値を直接渡してはいけない",
+      "外部公開する状態は readonly + 専用アクション関数で書き込み経路を一本化する"
+    ],
+    "furtherReading": [
+      {
+        "title": "Vue.js — Reactivity Fundamentals",
+        "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html"
+      },
+      {
+        "title": "Vue.js — Reactivity Utilities",
+        "url": "https://vuejs.org/api/reactivity-utilities.html"
+      },
+      {
+        "title": "Vue.js — Reactivity in Depth",
+        "url": "https://vuejs.org/guide/extras/reactivity-in-depth.html"
+      }
+    ]
+  }
+}

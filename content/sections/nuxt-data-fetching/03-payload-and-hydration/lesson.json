@@ -1,0 +1,258 @@
+{
+  "id": "nuxt-data-fetching.payload-and-hydration",
+  "version": 1,
+  "title": "payload と useState — サーバの値をクライアントに運ぶ",
+  "estimatedMinutes": 6,
+  "tags": ["nuxt", "ssr", "state"],
+  "prerequisites": ["nuxt-data-fetching.ssr-csr-ssg"],
+
+  "intro": {
+    "headline": "HTML と一緒に「データ」も運ばれる",
+    "body": "SSR で生成された HTML にはユーザーが見るマークアップだけでなく、サーバ側で取得した『データそのもの』も埋め込まれます。これが Nuxt の **payload** です。クライアントはハイドレーション時にこの payload を読み、再 fetch せずに状態を引き継ぎます。useFetch / useAsyncData / useState はこの仕組みを使ってサーバ・クライアント間の状態整合を保っています。"
+  },
+
+  "explanations": [
+    {
+      "heading": "payload とは何か",
+      "body": "Nuxt は SSR したページの HTML 末尾あたりに `<script>window.__NUXT__=...</script>` を埋め込み、サーバが計算した状態をクライアントへ渡します。具体的には useFetch / useAsyncData の取得結果、useState で保持した値、ルートの meta などが含まれます。\n\nクライアントは起動時にこの payload を読み、Pinia / useState / useFetch のキャッシュを **そのままの値で初期化** します。これによりハイドレーション直後でも『サーバが見ていた状態』と同じものを参照でき、再フェッチを避けつつ画面が継続します。",
+      "code": {
+        "lang": "html",
+        "src": "<!-- 簡略化したイメージ -->\n<body>\n  <div id=\"__nuxt\">...SSRed HTML...</div>\n  <script>window.__NUXT__={ data: { 'users-1': {...} }, state: {...} }</script>\n  <script type=\"module\" src=\"/_nuxt/entry.js\"></script>\n</body>"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Data Fetching — Payload",
+          "url": "https://nuxt.com/docs/getting-started/data-fetching#passing-data-from-server-to-client"
+        }
+      ]
+    },
+    {
+      "heading": "useState は SSR セーフな共有状態",
+      "body": "`useState(key, init)` は『キーで識別される共有 ref』を提供します。サーバで作った状態は payload に乗ってクライアントへ運ばれ、ハイドレート時に同じ値で復元されます。\n\n素の `ref` をモジュールトップで宣言してしまうと **サーバインスタンスが複数リクエスト間で共有されるバグ**（別ユーザーの状態が混ざる）が起きます。SSR で安全な共有状態は必ず useState（または Pinia の defineStore）で作る必要があります。",
+      "code": {
+        "lang": "ts",
+        "src": "// ✅ SSR セーフ\nconst counter = useState('counter', () => 0)\n\n// ❌ SSR で全リクエスト共有になる\n// import { ref } from 'vue'\n// export const counter = ref(0)"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — useState",
+          "url": "https://nuxt.com/docs/api/composables/use-state"
+        },
+        {
+          "title": "Nuxt — Best Practices: Shared State on SSR",
+          "url": "https://nuxt.com/docs/getting-started/state-management"
+        }
+      ]
+    },
+    {
+      "heading": "payload に乗るものはシリアライズ可能でなければならない",
+      "body": "payload は `<script>` 内の文字列として埋め込まれます。そのため格納できるのは JSON シリアライズ可能な値（プリミティブ・配列・プレーンオブジェクト・Date/Map/Set など特定の型）に限られます。関数、クラスインスタンス、Symbol、循環参照は載せられません。\n\nNuxt は内部で devalue を使い、Date や Map など一部の組み込み型を再現できる形でシリアライズします。それでも DB 接続オブジェクト、Response、ストリーム類は payload に乗らないので、useAsyncData の return では『純粋なデータ』に整形して返すのが原則です。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ Response オブジェクトを返す → シリアライズ不能\nawait useAsyncData('x', async () => {\n  return await fetch('/api/x')\n})\n\n// ✅ JSON 化済みデータを返す\nawait useAsyncData('x', async () => {\n  const res = await fetch('/api/x')\n  return await res.json()\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Data Fetching — Serializable Data",
+          "url": "https://nuxt.com/docs/getting-started/data-fetching#passing-data-from-server-to-client"
+        }
+      ]
+    },
+    {
+      "heading": "useFetch のキーと payload 再利用",
+      "body": "useFetch / useAsyncData が同じキーを共有していれば、クライアント側でその結果を再利用できます。これは `refresh()` を呼ぶまで再フェッチが起きない仕組みでもあります。\n\nキーは useFetch では URL から自動生成、useAsyncData では明示指定です。同じ key を 2 箇所で使うと payload が共有されるため、**意図せずデータが上書きされる事故** に注意します。逆に「同じ URL を別ページで別キャッシュにしたい」場合は useAsyncData で独自キーを使い分けます。",
+      "code": {
+        "lang": "ts",
+        "src": "// 同じキーを別ページで使う → payload を共有\n// page A:\nuseAsyncData('user-summary', () => $fetch('/api/me'))\n// page B:\nuseAsyncData('user-summary', () => $fetch('/api/me')) // 同じ payload を使い回す\n\n// 個別キャッシュにしたい場合\nuseAsyncData('user-summary:A', ...)\nuseAsyncData('user-summary:B', ...)"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — useAsyncData — key parameter",
+          "url": "https://nuxt.com/docs/api/composables/use-async-data#params"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで起きる問題として正しいのは？（Nuxt の SSR 環境）",
+      "code": {
+        "lang": "ts",
+        "src": "// composables/counter.ts\nimport { ref } from 'vue'\nexport const counter = ref(0)"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "問題なし。Nuxt は自動でリクエストごとに分離してくれる",
+          "isCorrect": false,
+          "explanation": "Nuxt は素の ref を自動でリクエストスコープにしない。"
+        },
+        {
+          "id": "b",
+          "label": "サーバ側で複数リクエストにまたがって同じ ref を共有してしまい、ユーザー間で状態が混ざる",
+          "isCorrect": true,
+          "explanation": "正解。モジュールトップの ref は Node プロセスで 1 つしか作られない。SSR で複数ユーザーが共有してしまう。useState か defineStore を使う。"
+        },
+        {
+          "id": "c",
+          "label": "クライアントでだけ動き、SSR ではエラーになる",
+          "isCorrect": false,
+          "explanation": "実行はできるが、別の問題（共有汚染）が起きる。"
+        },
+        {
+          "id": "d",
+          "label": "ハイドレーション直後に必ず 0 にリセットされる",
+          "isCorrect": false,
+          "explanation": "自動でのリセット動作はない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — State Management — Best Practices",
+          "url": "https://nuxt.com/docs/getting-started/state-management"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで data に入る値として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "const { data } = await useAsyncData('x', async () => {\n  return new Map([['a', 1], ['b', 2]])\n})"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "Map インスタンスがそのまま入る（Nuxt は devalue で Map を再現できる）",
+          "isCorrect": true,
+          "explanation": "正解。Nuxt は devalue を採用しており、Map / Set / Date など一部の組み込み型は payload で再現される。"
+        },
+        {
+          "id": "b",
+          "label": "プレーンオブジェクト { a: 1, b: 2 } に変換される",
+          "isCorrect": false,
+          "explanation": "JSON.stringify ではないので、Map が単純なプレーンオブジェクトに潰れることはない。"
+        },
+        {
+          "id": "c",
+          "label": "シリアライズ不能エラーで data は null になる",
+          "isCorrect": false,
+          "explanation": "Map は devalue 対応のためシリアライズできる。"
+        },
+        {
+          "id": "d",
+          "label": "実行時例外でページが 500 になる",
+          "isCorrect": false,
+          "explanation": "Map のシリアライズは正常動作の範囲内。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Data Fetching — Serializable Types",
+          "url": "https://nuxt.com/docs/getting-started/data-fetching#passing-data-from-server-to-client"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "ログインユーザー情報をアプリ全体で共有したい。SSR でセッションを元にサーバ側で取得し、クライアントでハイドレート後はそのまま使う設計。最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "useState('me', () => null) を作り、plugins で SSR 中に取得して埋める",
+          "isCorrect": true,
+          "explanation": "正解。useState は SSR セーフな共有状態で、payload を経由してハイドレート時にクライアントへ正しく渡る。plugins で `if (import.meta.server)` ガードして取得すれば SSR 限定で取得できる。"
+        },
+        {
+          "id": "b",
+          "label": "モジュールトップで `export const me = ref(null)` を作って各所から書き換える",
+          "isCorrect": false,
+          "explanation": "SSR で別ユーザーの状態が混ざる。今回のような認証情報では致命的。"
+        },
+        {
+          "id": "c",
+          "label": "onMounted で /api/me を叩いて Pinia に入れる",
+          "isCorrect": false,
+          "explanation": "SSR で取得しないので初期 HTML にユーザー情報が反映されない。SEO 不要でも初期表示のチラつきが大きくなる。"
+        },
+        {
+          "id": "d",
+          "label": "Cookie に JSON を入れて毎リクエスト読み書きする",
+          "isCorrect": false,
+          "explanation": "Cookie のサイズ制限・セキュリティ上のリスクが大きい。useState + サーバ側取得が王道。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — useState",
+          "url": "https://nuxt.com/docs/api/composables/use-state"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードを別々のページで実行した。クライアント側で起きることは？",
+      "code": {
+        "lang": "ts",
+        "src": "// page A\nconst { data } = await useAsyncData('shared', () => $fetch('/api/a'))\n\n// page B\nconst { data } = await useAsyncData('shared', () => $fetch('/api/b'))"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "別キーとして 2 件キャッシュされる",
+          "isCorrect": false,
+          "explanation": "key は文字列で同一。別キーにはならない。"
+        },
+        {
+          "id": "b",
+          "label": "同じキー 'shared' を共有しており、後から実行されたほうの結果で payload が上書きされる",
+          "isCorrect": true,
+          "explanation": "正解。useAsyncData の key が衝突すると payload を共有し、意図せず別データが上書きされる。ページごとに独立したキャッシュにしたい場合はキーを分ける。"
+        },
+        {
+          "id": "c",
+          "label": "Nuxt が key 衝突を検出して throw する",
+          "isCorrect": false,
+          "explanation": "throw はせず、共有挙動になる。"
+        },
+        {
+          "id": "d",
+          "label": "両方の結果が配列として data にマージされる",
+          "isCorrect": false,
+          "explanation": "そのようなマージ動作は無い。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — useAsyncData",
+          "url": "https://nuxt.com/docs/api/composables/use-async-data"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "Nuxt SSR は HTML と一緒に payload（window.__NUXT__）を埋め込み、クライアントの状態初期化に使う",
+      "SSR で安全に共有したい状態は useState または Pinia の defineStore で作る（素の ref のモジュール export は危険）",
+      "useAsyncData の return は JSON シリアライズ（devalue）可能でなければならない",
+      "useAsyncData のキーは payload キャッシュキー。衝突は上書き事故になる"
+    ],
+    "furtherReading": [
+      {
+        "title": "Nuxt — Data Fetching",
+        "url": "https://nuxt.com/docs/getting-started/data-fetching"
+      },
+      {
+        "title": "Nuxt — State Management",
+        "url": "https://nuxt.com/docs/getting-started/state-management"
+      }
+    ]
+  }
+}

@@ -1,0 +1,246 @@
+{
+  "id": "modern-css.logical-properties",
+  "version": 1,
+  "title": "論理プロパティ（margin-inline 等）",
+  "estimatedMinutes": 5,
+  "tags": ["css", "logical-properties", "i18n"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "left / right ではなく start / end で考える",
+    "body": "従来の `margin-left` / `padding-right` は『物理方向』に縛られていて、RTL（アラビア語など右→左）言語や縦書きでレイアウトが崩れがちでした。論理プロパティ（`margin-inline-start` / `padding-block-end` など）は『書字方向に対する論理的な start / end』を扱うため、direction を切り替えるだけで自然に反転します。i18n 対応をしないアプリでも、書きやすさと一貫性の観点でモダンな初期値になっています。"
+  },
+
+  "explanations": [
+    {
+      "heading": "inline 軸と block 軸",
+      "body": "CSS の論理軸は 2 つあります：\n\n- **inline 軸**: テキストが流れる方向。日本語の横書きや英語では左右、縦書きでは上下\n- **block 軸**: ブロックが積み重なる方向。横書きでは上下、縦書きでは左右\n\n論理プロパティはこの軸を基準に `*-inline-start` / `*-inline-end` / `*-block-start` / `*-block-end` の 4 方向を持ちます。横書き左→右の標準的な状況では `inline-start` ＝ 左、`block-start` ＝ 上 と対応します。",
+      "code": {
+        "lang": "css",
+        "src": ".card {\n  margin-inline: 16px;        /* margin-left + margin-right 相当 */\n  padding-block: 12px;        /* padding-top + padding-bottom 相当 */\n  margin-inline-start: 24px;  /* LTR では左、RTL では右 */\n  border-inline-end: 1px solid; /* 文末方向のボーダー */\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — CSS Logical Properties and Values",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_logical_properties_and_values"
+        }
+      ]
+    },
+    {
+      "heading": "ショートハンドとプロパティ群",
+      "body": "頻出のセットを覚えるとほぼ十分です：\n\n- `margin-inline` / `margin-block`: 軸方向の margin 一括\n- `padding-inline` / `padding-block`: 軸方向の padding 一括\n- `border-inline` / `border-block`: 軸方向の border 一括\n- `inset-inline` / `inset-block`: position 系で軸方向の top/left/right/bottom 相当\n- `inline-size` / `block-size`: width / height の論理版\n\n位置指定（`top: 10px` 等）も論理化したいときは `inset-block-start: 10px` を使います。",
+      "code": {
+        "lang": "css",
+        "src": ".tip {\n  position: absolute;\n  inset-block-start: 0;   /* top: 0 相当 */\n  inset-inline-end: 0;    /* right: 0 相当（LTR） */\n  inline-size: 200px;     /* width */\n  block-size: auto;       /* height */\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — Logical properties for sizing",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_logical_properties_and_values/Sizing_with_logical_properties"
+        }
+      ]
+    },
+    {
+      "heading": "RTL / 縦書きとの相性",
+      "body": "`direction: rtl` を root に付けるだけで、論理プロパティを使ったレイアウトは自然に左右反転します。物理プロパティで書かれた CSS は手動で全て反転 CSS を用意する必要があるのに対し、論理プロパティなら同じスタイルが両方の direction で意図通りに動作します。\n\n縦書き（`writing-mode: vertical-rl` など）も同じ仕組みで、inline 軸が縦に、block 軸が横になります。装飾的なレイアウトを縦書きでも壊さない設計に向いています。",
+      "code": {
+        "lang": "css",
+        "src": "html[dir='rtl'] .card {\n  /* 論理プロパティを使っていれば追加 CSS 不要で反転する */\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — direction",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/direction"
+        }
+      ]
+    },
+    {
+      "heading": "物理プロパティを混ぜないコツ",
+      "body": "論理プロパティと物理プロパティを混ぜると、direction 切り替え時に予想外の挙動になります。新規 CSS では『余白・ボーダー・サイズ・position 系』は論理プロパティに統一するのが原則です。\n\n例外として、見た目が完全に物理的な要素（例: 影の落ちる方向、グラデーションの向き、絶対座標のアイコン位置で direction に依らないもの）は物理のままで構いません。判断軸は『direction 反転時に反転してほしいか？』です。",
+      "code": {
+        "lang": "css",
+        "src": "/* ❌ 混ぜると direction 反転時にズレやすい */\n.card { margin-left: 16px; padding-inline: 12px; }\n\n/* ✅ 揃える */\n.card { margin-inline-start: 16px; padding-inline: 12px; }"
+      },
+      "sources": [
+        {
+          "title": "web.dev — Logical CSS",
+          "url": "https://web.dev/articles/learn/css/logical-properties"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "html { direction: ltr } のときの margin-inline-start は物理的に何に対応する？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "margin-left",
+          "isCorrect": true,
+          "explanation": "正解。LTR の横書きでは inline-start = 左。"
+        },
+        {
+          "id": "b",
+          "label": "margin-right",
+          "isCorrect": false,
+          "explanation": "それは inline-end（LTR の場合）。"
+        },
+        {
+          "id": "c",
+          "label": "margin-top",
+          "isCorrect": false,
+          "explanation": "block-start に対応。"
+        },
+        {
+          "id": "d",
+          "label": "writing-mode に依らず常に margin-left",
+          "isCorrect": false,
+          "explanation": "writing-mode が縦書きになると軸が回転するので一定ではない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — CSS Logical Properties and Values",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_logical_properties_and_values"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の CSS で direction: rtl にすると、要素は物理的にどちら側へ寄る？",
+      "code": {
+        "lang": "css",
+        "src": ".tip {\n  position: absolute;\n  inset-inline-end: 0;\n}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "左へ寄る",
+          "isCorrect": true,
+          "explanation": "正解。RTL では inline-end が物理的な左。論理プロパティが direction に追随する典型例。"
+        },
+        {
+          "id": "b",
+          "label": "右へ寄る",
+          "isCorrect": false,
+          "explanation": "それは LTR の場合。"
+        },
+        {
+          "id": "c",
+          "label": "上へ寄る",
+          "isCorrect": false,
+          "explanation": "block 軸ではなく inline 軸を指定している。"
+        },
+        {
+          "id": "d",
+          "label": "中央へ寄る",
+          "isCorrect": false,
+          "explanation": "中央寄せの宣言はない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — inset-inline-end",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/inset-inline-end"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "アプリは日本語のみだが、新規 CSS を論理プロパティで書くべきか？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "書くべき。i18n 対応の有無に関わらず、書きやすさと一貫性のために論理プロパティが現代的初期値",
+          "isCorrect": true,
+          "explanation": "正解。margin-inline / padding-block は記述が短くなり、将来 RTL や縦書きを試す際にも自然に対応できる。MDN や web.dev も論理プロパティを推奨。"
+        },
+        {
+          "id": "b",
+          "label": "i18n しないなら物理プロパティで十分。むしろ論理は混乱の元",
+          "isCorrect": false,
+          "explanation": "学習コストはあるが、新規プロジェクトでは論理プロパティが推奨されている。"
+        },
+        {
+          "id": "c",
+          "label": "ブラウザサポートが弱いので避けるべき",
+          "isCorrect": false,
+          "explanation": "主要ブラウザでサポート済み。Baseline 入りしている機能が多数。"
+        },
+        {
+          "id": "d",
+          "label": "両方を半々で書くのが安全",
+          "isCorrect": false,
+          "explanation": "混在は最悪の選択。direction 反転で意図しない挙動になる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "web.dev — Logical CSS",
+          "url": "https://web.dev/articles/learn/css/logical-properties"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のうち『inline 軸の両端に padding 12px』を 1 行で書く正しい記法は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "padding-inline: 12px;",
+          "isCorrect": true,
+          "explanation": "正解。padding-inline は start と end の両方をまとめて指定するショートハンド。"
+        },
+        {
+          "id": "b",
+          "label": "padding-x: 12px;",
+          "isCorrect": false,
+          "explanation": "padding-x という標準 CSS プロパティは存在しない（Tailwind の独自記法と混同しやすい）。"
+        },
+        {
+          "id": "c",
+          "label": "padding: 0 12px;（物理表記）",
+          "isCorrect": false,
+          "explanation": "動くが論理プロパティではなく、direction 切替時に対応しない。"
+        },
+        {
+          "id": "d",
+          "label": "margin-inline: 12px;",
+          "isCorrect": false,
+          "explanation": "margin と padding を取り違えている。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — padding-inline",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/padding-inline"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "論理プロパティは書字方向の軸（inline / block）で 4 方向を表現する",
+      "margin-inline / padding-block / inset-inline などのショートハンドが頻出",
+      "RTL / 縦書きでも追加 CSS 無しで正しく反転する",
+      "新規 CSS では物理／論理を混ぜず、論理に統一するのが現代的初期値"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Logical Properties and Values",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_logical_properties_and_values"
+      },
+      {
+        "title": "web.dev — Logical CSS",
+        "url": "https://web.dev/articles/learn/css/logical-properties"
+      }
+    ]
+  }
+}

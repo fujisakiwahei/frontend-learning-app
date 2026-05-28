@@ -1,0 +1,250 @@
+{
+  "id": "accessibility.semantic-html",
+  "version": 1,
+  "title": "セマンティック HTML — div を選ぶ前に",
+  "estimatedMinutes": 5,
+  "tags": ["a11y", "html"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "正しい要素を選ぶだけで多くの aria が要らなくなる",
+    "body": "ボタンに `<div onclick>` を使う代わりに `<button>` を使う、それだけでキーボード操作・スクリーンリーダー読み上げ・focus 表示・送信フォーム連携が自動で揃います。アクセシビリティの第一歩は『正しい HTML 要素を選ぶ』こと。div で全部組み立てた上で aria 属性を付け足すより、はるかに堅く速い実装になります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "ARIA を上塗りする前に正しい要素",
+      "body": "W3C の WAI-ARIA Authoring Practices には『**1st rule of ARIA**: HTML の要素・属性で同じ意味を表現できるなら、ARIA を使わずそれを使う』と明記されています。\n\n例えば：\n\n- クリッカブル → `<button>` または `<a>`\n- リスト → `<ul>` / `<ol>`\n- 見出し → `<h1>`〜`<h6>`\n- ランドマーク → `<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`\n- フォーム → `<form>` / `<label>` / `<input>` / `<fieldset>`\n\nこれらは focus 順、スクリーンリーダー読み上げ、キーボード操作などのアクセシビリティ機能が既定で備わっています。",
+      "code": {
+        "lang": "html",
+        "src": "<!-- ❌ button っぽい div -->\n<div role=\"button\" tabindex=\"0\" @click=\"...\" @keydown.enter=\"...\">送信</div>\n\n<!-- ✅ そのまま button -->\n<button type=\"submit\">送信</button>"
+      },
+      "sources": [
+        {
+          "title": "ARIA — First rule of ARIA use",
+          "url": "https://www.w3.org/TR/using-aria/#rule1"
+        },
+        {
+          "title": "MDN — Semantics in HTML",
+          "url": "https://developer.mozilla.org/en-US/docs/Glossary/Semantics#semantics_in_html"
+        }
+      ]
+    },
+    {
+      "heading": "button / a の使い分け",
+      "body": "クリックすると **何かが起きる**（モーダルを開く、状態が変わる、送信する）なら `<button>`。クリックすると **別の場所へ移動する** なら `<a href=\"...\">`。これを混同すると、リンクの右クリック→新しいタブで開く、Enter で押す、スペースで押すといった既定動作が崩れます。\n\n見た目だけ揃えたい場合は、CSS で button のスタイルを a に寄せる／a のスタイルを button に寄せるのが正しいアプローチです。",
+      "code": {
+        "lang": "html",
+        "src": "<button type=\"button\" @click=\"open\">設定を開く</button>\n<a href=\"/settings\">設定ページへ</a>"
+      },
+      "sources": [
+        {
+          "title": "MDN — <a> / <button>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a"
+        }
+      ]
+    },
+    {
+      "heading": "見出しの階層は読み上げの目次になる",
+      "body": "スクリーンリーダーには **見出しジャンプ** という機能があり、`<h1>` 〜 `<h6>` のリストでページの目次を読み上げ・ジャンプできます。デザイン上の大小だけで要素を選ばず、文書構造として一貫した階層を保つのが原則です。\n\nh2 のあとに h4 を飛ばして使うと階層が崩れます。見出しサイズと文書構造を切り離したい場合は、見出し要素はそのままに `font-size` でデザインを調整します。",
+      "code": {
+        "lang": "html",
+        "src": "<!-- ❌ 階層が崩れている -->\n<h1>記事タイトル</h1>\n<h4>section A</h4>\n\n<!-- ✅ 階層を保つ -->\n<h1>記事タイトル</h1>\n<h2>section A</h2>\n<h3>subsection</h3>"
+      },
+      "sources": [
+        {
+          "title": "MDN — Heading elements",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements"
+        }
+      ]
+    },
+    {
+      "heading": "ランドマーク要素でページの骨格を伝える",
+      "body": "`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>` といったランドマーク要素は、スクリーンリーダーに『ここから本文』『ここはナビ』を伝えます。視覚的にはほぼ同じ見た目でも、これがあると『本文へジャンプ』が一発で可能になります。\n\nページに **`<main>` は 1 つだけ** 配置するのが原則。テンプレートを使う Vue / Nuxt でもレイアウト側に 1 つだけ置くのが王道です。",
+      "code": {
+        "lang": "html",
+        "src": "<header>...</header>\n<nav aria-label=\"主要ナビゲーション\">...</nav>\n<main>...</main>\n<aside aria-label=\"関連情報\">...</aside>\n<footer>...</footer>"
+      },
+      "sources": [
+        {
+          "title": "MDN — ARIA landmarks",
+          "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Accessibility/WAI-ARIA_basics#signposts_landmarks"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "design-judgment-4choice",
+      "prompt": "「クリックでモーダルを開く要素」を最も適切に書くのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "<button type=\"button\" @click=\"open\">開く</button>",
+          "isCorrect": true,
+          "explanation": "正解。何かが起きるクリックは button。キーボード操作・focus・スクリーンリーダーの『ボタン』読み上げが自動で揃う。"
+        },
+        {
+          "id": "b",
+          "label": "<div role=\"button\" tabindex=\"0\" @click=\"open\" @keydown.enter=\"open\">開く</div>",
+          "isCorrect": false,
+          "explanation": "全部の挙動を再実装しても、focus visible・スペースキー押下・disable 状態など漏れが多い。"
+        },
+        {
+          "id": "c",
+          "label": "<a href=\"#\" @click.prevent=\"open\">開く</a>",
+          "isCorrect": false,
+          "explanation": "実体はリンクではないので a は不適切。右クリックで開ける選択肢が出るなど混乱の元。"
+        },
+        {
+          "id": "d",
+          "label": "<span @click=\"open\">開く</span>",
+          "isCorrect": false,
+          "explanation": "tabindex も role も無く、キーボードで使えない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "ARIA — Rule 1",
+          "url": "https://www.w3.org/TR/using-aria/#rule1"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "design-judgment-4choice",
+      "prompt": "ページ全体のレイアウトでランドマーク <main> はいくつ置くべき？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "1 つだけ",
+          "isCorrect": true,
+          "explanation": "正解。<main> は 1 ページに 1 つが標準。複数あるとランドマークの意味が薄れる。"
+        },
+        {
+          "id": "b",
+          "label": "セクションごとに置く（2〜3 個）",
+          "isCorrect": false,
+          "explanation": "意味のあるランドマークが分散して、スクリーンリーダーで本文の特定がしづらくなる。"
+        },
+        {
+          "id": "c",
+          "label": "0 個（div で十分）",
+          "isCorrect": false,
+          "explanation": "ランドマークがないと『本文へジャンプ』が機能しない。"
+        },
+        {
+          "id": "d",
+          "label": "個数の規定はない、自由に置いてよい",
+          "isCorrect": false,
+          "explanation": "HTML 仕様で『visible な <main> は 1 ページに 1 つ』と定められている。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — <main>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/main"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "code-reading-4choice",
+      "prompt": "次のうち見出し階層として最も適切なのは？",
+      "code": {
+        "lang": "html",
+        "src": "ページ構造の例（タイトル → 章 → 節）"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "h1 → h2 → h3 と素直に降りる",
+          "isCorrect": true,
+          "explanation": "正解。見出し階層を 1 段ずつ降りるのが標準。スクリーンリーダーの目次として機能する。"
+        },
+        {
+          "id": "b",
+          "label": "h1 → h4 → h2 のようにデザイン優先で選ぶ",
+          "isCorrect": false,
+          "explanation": "階層が壊れると目次が読みづらくなる。デザインは CSS で調整する。"
+        },
+        {
+          "id": "c",
+          "label": "全部 h1 で揃え、CSS でサイズを変える",
+          "isCorrect": false,
+          "explanation": "見出し階層が無くなる。"
+        },
+        {
+          "id": "d",
+          "label": "見出しを使わず div + class で表現する",
+          "isCorrect": false,
+          "explanation": "セマンティクスが失われ、スクリーンリーダーから見出しとして認識されない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Heading elements",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "リンクとボタンの選び分けについて、最も正しい指針は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "URL を変える / ページ遷移するならリンク、状態変化やアクションならボタン",
+          "isCorrect": true,
+          "explanation": "正解。HTML 仕様の意図に沿った最も実用的な指針。"
+        },
+        {
+          "id": "b",
+          "label": "見た目が文字列ならリンク、ボックスならボタン",
+          "isCorrect": false,
+          "explanation": "見た目ではなく挙動の意味で選ぶ。"
+        },
+        {
+          "id": "c",
+          "label": "Vue Router を使うときは全て NuxtLink、それ以外は button",
+          "isCorrect": false,
+          "explanation": "router-link / NuxtLink は内部的に <a> を出す。アクション系は依然 button。"
+        },
+        {
+          "id": "d",
+          "label": "両者は等価なのでどちらでも良い",
+          "isCorrect": false,
+          "explanation": "等価ではない。キーボード操作・右クリック・aria の意味が異なる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — <a> vs <button>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "ARIA の前にまず HTML の正しい要素を選ぶ（ARIA First Rule）",
+      "クリックで何かが起きるなら <button>、別の場所へ移動するなら <a>",
+      "見出しは <h1>〜<h6> で階層を保つ。デザインは CSS で調整",
+      "<main> は 1 ページ 1 つ。<header>/<nav>/<aside>/<footer> でページの骨格を伝える"
+    ],
+    "furtherReading": [
+      {
+        "title": "ARIA Authoring Practices",
+        "url": "https://www.w3.org/WAI/ARIA/apg/"
+      },
+      {
+        "title": "MDN — HTML: A good basis for accessibility",
+        "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Accessibility/HTML"
+      }
+    ]
+  }
+}

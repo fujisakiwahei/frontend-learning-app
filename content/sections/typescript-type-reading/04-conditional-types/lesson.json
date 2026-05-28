@@ -1,0 +1,258 @@
+{
+  "id": "typescript-type-reading.conditional-types",
+  "version": 1,
+  "title": "条件型と infer",
+  "estimatedMinutes": 7,
+  "tags": ["typescript", "conditional-types", "infer"],
+  "prerequisites": ["typescript-type-reading.generics"],
+
+  "intro": {
+    "headline": "型の世界の if と『取り出し』",
+    "body": "条件型は『T が X に代入可能なら A、そうでなければ B』という型レベルの if 式です。`T extends X ? A : B` の構文で書きます。さらに `infer U` を組み合わせると『型の中から特定の部分を取り出す』ことができ、ReturnType や Awaited などの標準ユーティリティ型もこのパターンで実装されています。"
+  },
+
+  "explanations": [
+    {
+      "heading": "基本: T extends X ? A : B",
+      "body": "もっとも基本の使い方は『この T はあるルールに当てはまるか？』で型を分岐させること。例として `IsString<T> = T extends string ? true : false` を書けば、`IsString<'hi'>` は true、`IsString<number>` は false になります。\n\nこの構文はユニオン型に対しては **分配（distributive）** されます。`IsString<'a' | number>` は `IsString<'a'> | IsString<number>` に展開されて `true | false` になります。これを止めたいときは `[T] extends [X]` のようにタプルで囲むテクニックを使います。",
+      "code": {
+        "lang": "ts",
+        "src": "type IsString<T> = T extends string ? true : false\n\ntype A = IsString<'hi'>          // true\ntype B = IsString<42>            // false\ntype C = IsString<'a' | 42>      // true | false ＝ boolean（分配される）\ntype D = [IsString<'a' | 42>]    // 分配されないラップ"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Conditional Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html"
+        },
+        {
+          "title": "TypeScript — Distributive Conditional Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types"
+        }
+      ]
+    },
+    {
+      "heading": "infer で『取り出す』",
+      "body": "`infer U` は条件型の中で『ここの位置にあった型を新しい変数 U として捕まえる』ための演算子です。`T extends Array<infer U> ? U : never` と書けば『T が何かの配列なら、その要素型を U として返す』が成立します。\n\n標準ユーティリティの ReturnType は条件型 + infer で実装されています：`type ReturnType<F> = F extends (...args: any[]) => infer R ? R : never`。Awaited も同様に Promise の中身を取り出すパターンです。",
+      "code": {
+        "lang": "ts",
+        "src": "type ElementOf<T> = T extends (infer U)[] ? U : never\n\ntype A = ElementOf<number[]>      // number\ntype B = ElementOf<string[][]>    // string[]\n\n// 関数の引数型を取り出す\ntype FirstParam<F> = F extends (a: infer A, ...rest: any[]) => any ? A : never\n\ntype P1 = FirstParam<(x: string, y: number) => void>  // string"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Inferring within conditional types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#inferring-within-conditional-types"
+        }
+      ]
+    },
+    {
+      "heading": "ユニオンの分配を意図的に使う／止める",
+      "body": "ユニオン分配は便利な反面、意図せずユニオンを分散させてしまうこともあります。たとえば `NonNullable<T> = T extends null | undefined ? never : T` はユニオン分配が起きて『null と undefined だけを潰す』効果を得ています。\n\n逆に「型 T 自体がユニオンかどうか」を判定したいときは分配を止める必要があります：`type IsUnion<T> = [T] extends [infer U] ? ... : ...` のようにタプルで囲むのが定石。分配が起きるかどうかは『裸の型パラメータ T が単独で extends 左辺にあるか』で決まる、という点を意識すると読みやすくなります。",
+      "code": {
+        "lang": "ts",
+        "src": "type NonNullable_<T> = T extends null | undefined ? never : T\n\ntype A = NonNullable_<string | null | undefined>  // string\n\n// 分配を止めるタプル囲み\ntype IsUnion<T, U = T> = [T] extends [U] ? ([U] extends [T] ? false : true) : true"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — NonNullable",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#nonnullabletype"
+        }
+      ]
+    },
+    {
+      "heading": "読みのコツ: 内側から、必要な部分だけ",
+      "body": "条件型の式が複雑になってきたら、エディタの『Go to Definition』や『型を見る』を使い、内側の式から段階的に評価して読みます。一度に全部を解釈しようとせず、`T extends ... ? ... : ...` の真側／偽側のどちらに分岐するかだけを追います。\n\nまた、複雑な型を書くときは『中間型エイリアス』を用意して読みやすくします：`type X = Foo<T>; type Y = Bar<X>` のように分けると、`Y` だけ見れば全体像を理解せずに使えるようになります。",
+      "code": {
+        "lang": "ts",
+        "src": "// 中間エイリアスで段階分割\ntype Resolved<F> = F extends (...a: any[]) => infer R ? R : never\ntype Unpacked<F> = Resolved<F> extends Promise<infer U> ? U : Resolved<F>\n\ntype X = Unpacked<() => Promise<string>>  // string\ntype Y = Unpacked<() => number>           // number"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Conditional Types (Handbook)",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `R` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "type FirstArg<F> = F extends (a: infer A, ...rest: any[]) => any ? A : never\ntype R = FirstArg<(s: string, n: number) => void>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "string",
+          "isCorrect": true,
+          "explanation": "正解。infer A が第 1 引数の型を捕まえる。string が抜き出される。"
+        },
+        {
+          "id": "b",
+          "label": "string | number",
+          "isCorrect": false,
+          "explanation": "rest は any[] で受け流しているので結果に混ざらない。"
+        },
+        {
+          "id": "c",
+          "label": "never",
+          "isCorrect": false,
+          "explanation": "関数型に一致するので true 側に分岐する。"
+        },
+        {
+          "id": "d",
+          "label": "void",
+          "isCorrect": false,
+          "explanation": "void は戻り値の型。第 1 引数とは無関係。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — infer keyword",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#inferring-within-conditional-types"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `R` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "type IsString<T> = T extends string ? 'yes' : 'no'\ntype R = IsString<'a' | 1>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "'yes'",
+          "isCorrect": false,
+          "explanation": "ユニオン分配でそれぞれ評価される。"
+        },
+        {
+          "id": "b",
+          "label": "'no'",
+          "isCorrect": false,
+          "explanation": "'a' は string に代入可能なので 'yes' 側にも入る。"
+        },
+        {
+          "id": "c",
+          "label": "'yes' | 'no'",
+          "isCorrect": true,
+          "explanation": "正解。'a' extends string → 'yes'、1 extends string → 'no'。ユニオン分配で和集合になる。"
+        },
+        {
+          "id": "d",
+          "label": "boolean",
+          "isCorrect": false,
+          "explanation": "boolean ではなく文字列リテラルのユニオン。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Distributive Conditional Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "Promise であってもなくても、関数の最終的な解決値型を取り出す型を書きたい。最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "type Result<F> = F extends (...a:any[]) => infer R ? (R extends Promise<infer U> ? U : R) : never",
+          "isCorrect": true,
+          "explanation": "正解。関数の戻り値を取り、Promise なら中身を、そうでなければそのまま返す。Awaited<ReturnType<F>> と同等の挙動。"
+        },
+        {
+          "id": "b",
+          "label": "type Result<F> = ReturnType<F>",
+          "isCorrect": false,
+          "explanation": "ReturnType だけだと Promise が剥がれない。"
+        },
+        {
+          "id": "c",
+          "label": "type Result<F> = F extends Promise<infer U> ? U : never",
+          "isCorrect": false,
+          "explanation": "F は関数型なので、関数自体は Promise ではない。常に never になる。"
+        },
+        {
+          "id": "d",
+          "label": "type Result<F> = Awaited<F>",
+          "isCorrect": false,
+          "explanation": "Awaited は Promise 用。関数型に直接適用しても期待した結果にならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Awaited",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#awaitedtype"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `T` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "type Unbox<T> = T extends (infer U)[] ? U : T\ntype T = Unbox<Unbox<number[][]>>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "number",
+          "isCorrect": true,
+          "explanation": "正解。1 回目で number[][] → number[]、2 回目で number[] → number。"
+        },
+        {
+          "id": "b",
+          "label": "number[]",
+          "isCorrect": false,
+          "explanation": "Unbox を 2 回適用しているのでさらに 1 段剥がれる。"
+        },
+        {
+          "id": "c",
+          "label": "number[][]",
+          "isCorrect": false,
+          "explanation": "1 回でも剥がれる。"
+        },
+        {
+          "id": "d",
+          "label": "never",
+          "isCorrect": false,
+          "explanation": "配列型に一致するので true 側に分岐する。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Conditional Types (Handbook)",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "条件型は『T extends X ? A : B』。型レベルの if",
+      "infer U で『その位置にあった型』を捕まえて取り出せる",
+      "ユニオン分配は『裸の型パラメータが extends 左辺』のときに発生。止めたいときはタプルで囲む",
+      "複雑な式は中間エイリアスに分け、エディタの型表示で段階的に読む"
+    ],
+    "furtherReading": [
+      {
+        "title": "TypeScript — Conditional Types",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html"
+      },
+      {
+        "title": "TypeScript — Utility Types (実装例の宝庫)",
+        "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html"
+      }
+    ]
+  }
+}

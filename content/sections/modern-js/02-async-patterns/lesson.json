@@ -1,0 +1,262 @@
+{
+  "id": "modern-js.async-patterns",
+  "version": 1,
+  "title": "Promise / async / await とイベントループ",
+  "estimatedMinutes": 7,
+  "tags": ["javascript", "async"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "『待つ』のと『同時にやる』を意識して書き分ける",
+    "body": "JavaScript は単一スレッドで動きますが、Promise と async/await のおかげで I/O を待つコードがほぼ同期的に書けます。気を付けたいのは『毎回 await すると直列実行になる』点と『for-of で await を回すと並列化のチャンスを失う』点。並列化したいときは Promise.all を使うのが基本です。実行順の理解にはイベントループのマイクロタスクとマクロタスクの区別が役立ちます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "Promise の基本と async/await",
+      "body": "Promise は『将来値が決まる箱』。`pending` → `fulfilled` または `rejected` に一度だけ遷移します。`.then(onFulfilled, onRejected)` で結果を受け取り、`.catch(onRejected)` で失敗を、`.finally(cb)` で両方の後処理を書けます。\n\n`async function` は **常に Promise を返す関数** で、その中の `await expr` は『expr を Promise として扱い、解決まで待つ』という意味です。同期コードと同じ書き味で非同期を扱えますが、関数の戻り値は Promise なので呼ぶ側でも await か then が必要です。",
+      "code": {
+        "lang": "ts",
+        "src": "async function loadUser(id: string) {\n  const res = await fetch(`/api/users/${id}`)\n  if (!res.ok) throw new Error('failed')\n  return await res.json()\n}\n\n// 呼ぶ側\nloadUser('1').then(u => console.log(u)).catch(e => console.error(e))"
+      },
+      "sources": [
+        {
+          "title": "MDN — async function",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function"
+        },
+        {
+          "title": "MDN — Using promises",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises"
+        }
+      ]
+    },
+    {
+      "heading": "直列 vs 並列: Promise.all",
+      "body": "for-of の中で await を呼ぶと、各イテレーションが直列に走ります。互いに依存しない非同期処理を集めるときは `Promise.all([p1, p2, p3])` で **並列実行 + 結果配列を待つ** のが定石。1 件でも失敗すれば即座に reject されます。\n\n全件の結果（成功も失敗も）を集めたいなら `Promise.allSettled`、最初に成功したものだけ取りたいなら `Promise.any`、最初に決着が付いたもの（成功でも失敗でも）を返すなら `Promise.race` を使います。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ 直列（合計時間 = N 件の合計）\nconst out: User[] = []\nfor (const id of ids) {\n  out.push(await loadUser(id))\n}\n\n// ✅ 並列（合計時間 ≈ 最も遅い 1 件）\nconst out = await Promise.all(ids.map(loadUser))"
+      },
+      "sources": [
+        {
+          "title": "MDN — Promise.all()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all"
+        },
+        {
+          "title": "MDN — Promise.allSettled() / .any() / .race()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"
+        }
+      ]
+    },
+    {
+      "heading": "イベントループ: マイクロタスク vs マクロタスク",
+      "body": "JavaScript の実行モデルは『1 つの同期スクリプトを走らせ終わったら、マイクロタスクキューを空にし、その後にマクロタスクを 1 つ取り出す』を繰り返します。\n\n- マイクロタスク: Promise の `.then` / `await` 直後 / `queueMicrotask` / MutationObserver\n- マクロタスク: setTimeout / setInterval / requestAnimationFrame / I/O コールバック\n\nつまり `Promise.resolve().then(...)` は `setTimeout(..., 0)` より先に走ります。await の直後のコードもマイクロタスクで実行されるため、UI ライブラリの DOM 更新タイミング（Vue の nextTick もマイクロタスク）の理解に直結します。",
+      "code": {
+        "lang": "ts",
+        "src": "console.log('A')\nsetTimeout(() => console.log('B'), 0)\nPromise.resolve().then(() => console.log('C'))\nconsole.log('D')\n\n// 出力: A D C B"
+      },
+      "sources": [
+        {
+          "title": "MDN — Microtasks and the JavaScript event loop",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide"
+        }
+      ]
+    },
+    {
+      "heading": "try/catch とエラー伝搬",
+      "body": "async 関数の中で throw、または await した Promise が reject すると、その関数の戻り値の Promise が reject されます。呼び出し側は try/catch（または .catch）で受け止めます。\n\n注意点：\n- `Promise.all` は 1 件目の失敗で即 reject。残りは走り続けるが結果は捨てられる\n- async 関数の中で throw する代わりに `return Promise.reject(e)` を返すのは等価\n- ハンドルされない rejection は警告（unhandledrejection）として浮上する\n\n非同期エラーは『どこで catch するか』を明示しないと埋もれます。各 API 層／UI 層／グローバルハンドラのどこで捕捉するか、設計時に決めるのが原則です。",
+      "code": {
+        "lang": "ts",
+        "src": "async function safeLoad(id: string) {\n  try {\n    return await loadUser(id)\n  } catch (e) {\n    console.error('load failed', e)\n    return null\n  }\n}\n\n// グローバルキャッチ\nwindow.addEventListener('unhandledrejection', (e) => {\n  console.error('unhandled', e.reason)\n})"
+      },
+      "sources": [
+        {
+          "title": "MDN — try...catch",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/try...catch"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードの出力順は？",
+      "code": {
+        "lang": "ts",
+        "src": "console.log('A')\nsetTimeout(() => console.log('B'), 0)\nPromise.resolve().then(() => console.log('C'))\nconsole.log('D')"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "A B C D",
+          "isCorrect": false,
+          "explanation": "setTimeout はマクロタスク。同期コードとマイクロタスクの後に走る。"
+        },
+        {
+          "id": "b",
+          "label": "A D C B",
+          "isCorrect": true,
+          "explanation": "正解。同期（A, D）→ マイクロタスク（C）→ マクロタスク（B）の順。Promise.then はマイクロタスクで setTimeout より先に処理される。"
+        },
+        {
+          "id": "c",
+          "label": "A C D B",
+          "isCorrect": false,
+          "explanation": "同期コードはすべて走り終わってからマイクロタスクが処理される。"
+        },
+        {
+          "id": "d",
+          "label": "A D B C",
+          "isCorrect": false,
+          "explanation": "setTimeout より先にマイクロタスク（C）が走る。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Event loop",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の 2 つのコードの実行時間の関係として正しいのは？（loadUser は 1 件 100ms と仮定、ids.length = 5）",
+      "code": {
+        "lang": "ts",
+        "src": "// A\nfor (const id of ids) await loadUser(id)\n\n// B\nawait Promise.all(ids.map(loadUser))"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "A ≈ 100ms / B ≈ 500ms",
+          "isCorrect": false,
+          "explanation": "逆。A が直列、B が並列。"
+        },
+        {
+          "id": "b",
+          "label": "A ≈ 500ms / B ≈ 100ms",
+          "isCorrect": true,
+          "explanation": "正解。A は直列で 5 件分の時間が積み上がる。B は並列で最も遅い 1 件で揃う。"
+        },
+        {
+          "id": "c",
+          "label": "両方 ≈ 100ms",
+          "isCorrect": false,
+          "explanation": "for-of の await は逐次実行になる。"
+        },
+        {
+          "id": "d",
+          "label": "両方 ≈ 500ms",
+          "isCorrect": false,
+          "explanation": "Promise.all は並列実行で時間が短縮される。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Promise.all()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "3 つの API を並行に呼ぶ。すべての結果（成功も失敗も）が必要で、1 件失敗しても他は使いたい。最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "Promise.allSettled([p1, p2, p3]) を使い、各要素の status を見て分岐する",
+          "isCorrect": true,
+          "explanation": "正解。allSettled は全件の完了を待ち、status と value/reason のオブジェクトの配列を返す。部分失敗を許容する設計に最適。"
+        },
+        {
+          "id": "b",
+          "label": "Promise.all([p1, p2, p3]) を使い、try/catch で受ける",
+          "isCorrect": false,
+          "explanation": "all は 1 件目の失敗で即 reject し、他の結果が捨てられる。"
+        },
+        {
+          "id": "c",
+          "label": "Promise.race([p1, p2, p3]) を使う",
+          "isCorrect": false,
+          "explanation": "race は最初の決着のみ。残りの結果は使えない。"
+        },
+        {
+          "id": "d",
+          "label": "await を 3 回直列で書く",
+          "isCorrect": false,
+          "explanation": "直列で遅くなる上、1 件失敗で残りに進めない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Promise.allSettled()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードでログ出力に問題があるとすれば、それは何？",
+      "code": {
+        "lang": "ts",
+        "src": "async function main() {\n  loadUser('1')\n  console.log('done')\n}\nmain()"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "loadUser の await が抜けており、エラー時に unhandled rejection が出る／done が完了前に出る",
+          "isCorrect": true,
+          "explanation": "正解。await を付けないと Promise が浮き、reject 時に unhandledrejection になる。さらに 'done' が loadUser の完了より先に出力される。"
+        },
+        {
+          "id": "b",
+          "label": "問題なし",
+          "isCorrect": false,
+          "explanation": "await 抜けは典型的バグの温床。"
+        },
+        {
+          "id": "c",
+          "label": "main の前に await が必要なだけ",
+          "isCorrect": false,
+          "explanation": "main 側の問題が本質。"
+        },
+        {
+          "id": "d",
+          "label": "loadUser を await すると同期になりブロックするので付けてはいけない",
+          "isCorrect": false,
+          "explanation": "await は同期化ではなく『この Promise の解決を待つ』。他のタスクはブロックしない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Promise — Common mistakes",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "async 関数は常に Promise を返す。await は『この Promise の解決を待つ』",
+      "for-of の中の await は直列実行。並列なら Promise.all / allSettled / any / race を使い分け",
+      "実行順は同期 → マイクロタスク（Promise.then）→ マクロタスク（setTimeout 等）",
+      "await を付け忘れた Promise は unhandledrejection を生む。エラー捕捉位置を設計で決める"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Using promises",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises"
+      },
+      {
+        "title": "MDN — Event loop",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop"
+      }
+    ]
+  }
+}

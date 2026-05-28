@@ -1,0 +1,254 @@
+{
+  "id": "accessibility.aria-attributes",
+  "version": 1,
+  "title": "ARIA 属性の最低限",
+  "estimatedMinutes": 6,
+  "tags": ["a11y", "aria"],
+  "prerequisites": ["accessibility.semantic-html"],
+
+  "intro": {
+    "headline": "本当に必要な 5〜6 個から覚える",
+    "body": "ARIA 属性は数十あって全部覚えるのは現実的ではありませんが、頻出のものはせいぜい 5〜6 個。まずは `aria-label` / `aria-labelledby` / `aria-describedby` / `aria-hidden` / `aria-expanded` / `aria-current` を押さえれば日常のフロントエンドで遭遇する大半をカバーできます。**HTML で表現できることを ARIA で上書きしない**のが大前提です。"
+  },
+
+  "explanations": [
+    {
+      "heading": "aria-label / aria-labelledby — 名前を補う",
+      "body": "`aria-label=\"閉じる\"` のようにアクセシブルネーム（読み上げ名）を直接付けます。アイコンだけのボタンや、視覚的にラベルを表示したくない場合に使います。\n\n`aria-labelledby=\"id\"` は別要素のテキストをラベルとして参照します。視覚的に存在するラベルがある場合はこちらのほうが翻訳・編集の整合が取りやすいです。\n\n**注意**: `<label for>` で繋げる素直な実装ができるならそちらが優先。aria-label は『他に手がない場合の補助』として使います。",
+      "code": {
+        "lang": "html",
+        "src": "<button aria-label=\"閉じる\">×</button>\n\n<h2 id=\"dlg-title\">削除の確認</h2>\n<div role=\"dialog\" aria-labelledby=\"dlg-title\">...</div>"
+      },
+      "sources": [
+        {
+          "title": "MDN — aria-label",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-label"
+        },
+        {
+          "title": "MDN — aria-labelledby",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-labelledby"
+        }
+      ]
+    },
+    {
+      "heading": "aria-describedby — 説明を結び付ける",
+      "body": "フォームの入力欄に付随する説明文・エラー文・ヘルプテキストを結び付けるのに使います。ラベル（必須・短い名前）とは別の追加情報です。\n\nスクリーンリーダーは focus 時に、ラベル → 説明の順で読み上げます。`aria-describedby` には複数の id を半角空白区切りで渡せるので、ヘルプ文とエラー文を同時に結び付けることもできます。",
+      "code": {
+        "lang": "html",
+        "src": "<label for=\"email\">メール</label>\n<input id=\"email\" type=\"email\" aria-describedby=\"email-hint email-error\" />\n<p id=\"email-hint\">仕事用のアドレスを推奨します</p>\n<p id=\"email-error\" v-if=\"hasError\">有効なメールではありません</p>"
+      },
+      "sources": [
+        {
+          "title": "MDN — aria-describedby",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-describedby"
+        }
+      ]
+    },
+    {
+      "heading": "aria-hidden — スクリーンリーダーから隠す",
+      "body": "`aria-hidden=\"true\"` を付けると、その要素以下が **読み上げ対象から除外** されます。装飾用の SVG アイコン、ラベルが別途付いている場合のアイコンなど、視覚的にだけ意味のある要素に使います。\n\n注意点：\n\n- focusable な要素（button や a 等）に aria-hidden を付けてはいけない（focus が当たっているのに読み上げない、というアクセシビリティ違反になる）\n- 視覚的に **見せない** のは別の手段（CSS の `display: none` や `visibility: hidden`）。aria-hidden と CSS の hidden を混同しない",
+      "code": {
+        "lang": "html",
+        "src": "<!-- ✅ ラベルが別途あるアイコンを読み上げから除外 -->\n<button>\n  <svg aria-hidden=\"true\">...</svg>\n  保存\n</button>\n\n<!-- ❌ focusable に aria-hidden -->\n<button aria-hidden=\"true\">送信</button>"
+      },
+      "sources": [
+        {
+          "title": "MDN — aria-hidden",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-hidden"
+        }
+      ]
+    },
+    {
+      "heading": "aria-expanded / aria-current — 状態を伝える",
+      "body": "- `aria-expanded=\"true|false\"`: 開閉トグル（アコーディオン、ドロップダウン、メニュー）の現在の状態を表す\n- `aria-current=\"page|step|true\"`: 同じ種類の要素群の中で『今の位置』を表す。ナビでアクティブなページを伝えるのに頻用\n\nこれらは状態の **同期** が必要で、Vue で `aria-expanded=\"open\"` のように reactive 値とバインドして自動で追従させるのが定石です。視覚的なハイライトと、スクリーンリーダーの読み上げ状態がズレないように管理します。",
+      "code": {
+        "lang": "vue",
+        "src": "<button :aria-expanded=\"open\" @click=\"open = !open\">詳細</button>\n<div v-if=\"open\">...</div>\n\n<nav>\n  <NuxtLink to=\"/\" :aria-current=\"isHome ? 'page' : undefined\">ホーム</NuxtLink>\n</nav>"
+      },
+      "sources": [
+        {
+          "title": "MDN — aria-expanded",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-expanded"
+        },
+        {
+          "title": "MDN — aria-current",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-current"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "design-judgment-4choice",
+      "prompt": "× 1 文字だけのアイコンボタン（モーダルの閉じる）の最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "<button aria-label=\"閉じる\">×</button>",
+          "isCorrect": true,
+          "explanation": "正解。× だけでは読み上げが意味を成さないので、aria-label でアクセシブルネームを補う。"
+        },
+        {
+          "id": "b",
+          "label": "<button>×</button>",
+          "isCorrect": false,
+          "explanation": "× が『multiplication sign』と読まれる可能性があり、機能が伝わらない。"
+        },
+        {
+          "id": "c",
+          "label": "<button title=\"閉じる\">×</button>",
+          "isCorrect": false,
+          "explanation": "title はマウスホバー時のツールチップで、スクリーンリーダーが必ずしも読み上げない。アクセシブルネームとしての信頼性は低い。"
+        },
+        {
+          "id": "d",
+          "label": "<div role=\"button\" aria-label=\"閉じる\">×</div>",
+          "isCorrect": false,
+          "explanation": "button 要素を素直に使えば role 付けは不要。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — aria-label",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-label"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の HTML の問題は？",
+      "code": {
+        "lang": "html",
+        "src": "<button aria-hidden=\"true\" @click=\"submit\">送信</button>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "問題なし",
+          "isCorrect": false,
+          "explanation": "focusable に aria-hidden を付けるのは典型的アンチパターン。"
+        },
+        {
+          "id": "b",
+          "label": "focusable な要素に aria-hidden を付けると、focus が当たっているのに読み上げないという矛盾が生じる",
+          "isCorrect": true,
+          "explanation": "正解。aria-hidden=\"true\" のものは focusable であってはならない、というのが ARIA 仕様の要件。"
+        },
+        {
+          "id": "c",
+          "label": "aria-hidden=\"true\" は HTML 仕様に存在しない",
+          "isCorrect": false,
+          "explanation": "存在する。使い方が不適切。"
+        },
+        {
+          "id": "d",
+          "label": "@click 属性のためビルドエラーになる",
+          "isCorrect": false,
+          "explanation": "Vue の構文。エラーにはならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — aria-hidden",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-hidden"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "アコーディオンの開閉ボタンに付けるべき ARIA 属性は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "aria-expanded を open 状態にバインド（true / false）",
+          "isCorrect": true,
+          "explanation": "正解。スクリーンリーダーが『展開済み』『折りたたまれている』を読み上げる。Vue では :aria-expanded=\"open\" のように reactive 値と同期させる。"
+        },
+        {
+          "id": "b",
+          "label": "aria-hidden を切り替える",
+          "isCorrect": false,
+          "explanation": "閉じている時にコンテンツを読み上げから外したいなら aria-hidden を子要素側に使うが、トグル自体の状態表現は aria-expanded。"
+        },
+        {
+          "id": "c",
+          "label": "aria-label でテキストを切り替える",
+          "isCorrect": false,
+          "explanation": "ラベル文字列の切替で擬似実装するのは冗長。標準の aria-expanded を使うべき。"
+        },
+        {
+          "id": "d",
+          "label": "何も付けず CSS で見た目だけ変える",
+          "isCorrect": false,
+          "explanation": "状態が読み上げに伝わらない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — aria-expanded",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-expanded"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "アクティブなページのナビゲーションリンクに付けるべき属性は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "aria-current=\"page\"",
+          "isCorrect": true,
+          "explanation": "正解。ナビ内で『現在のページ』を示す標準的属性。スクリーンリーダーが読み上げ、CSS でも [aria-current=\"page\"] でハイライトできる。"
+        },
+        {
+          "id": "b",
+          "label": "class=\"active\" だけ",
+          "isCorrect": false,
+          "explanation": "視覚的にしか伝わらない。スクリーンリーダーは現在地を判別できない。"
+        },
+        {
+          "id": "c",
+          "label": "aria-selected=\"true\"",
+          "isCorrect": false,
+          "explanation": "aria-selected はタブやリストボックス用。ナビ用ではない。"
+        },
+        {
+          "id": "d",
+          "label": "aria-checked=\"true\"",
+          "isCorrect": false,
+          "explanation": "aria-checked はチェックボックス／ラジオ用。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — aria-current",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-current"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "ARIA を盛る前に正しい HTML 要素を使う。aria-label は他に手がないときの補助",
+      "aria-describedby は『説明』、aria-labelledby は『名前』。役割を取り違えない",
+      "focusable な要素に aria-hidden を付けない（仕様違反）",
+      "状態系（aria-expanded / aria-current）はリアクティブな値と同期させる"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — ARIA Attributes reference",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes"
+      },
+      {
+        "title": "WAI-ARIA Authoring Practices",
+        "url": "https://www.w3.org/WAI/ARIA/apg/"
+      }
+    ]
+  }
+}

@@ -1,0 +1,254 @@
+{
+  "id": "modern-css.has-selector",
+  "version": 1,
+  "title": ":has() セレクタ — 親を子から条件付ける",
+  "estimatedMinutes": 5,
+  "tags": ["css", "selectors", "has"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "『子に X を含むときだけ親を変える』が CSS で書ける",
+    "body": "従来の CSS には『下方向の選択』しかなく、子要素の状態を親要素に反映するには JS で class を切り替える必要がありました。`:has()` は『指定したセレクタを子孫として持つ要素』を選択できる擬似クラスで、フォームの妥当性に応じたカードのハイライト、画像を含むカードと含まないカードの差別化など、JS なしで多くの『反応的』レイアウトが書けるようになります。Chrome / Safari / Firefox いずれもサポート済み。"
+  },
+
+  "explanations": [
+    {
+      "heading": "基本: 親要素を子から条件付ける",
+      "body": "`:has()` は引数のセレクタを子孫として持つ要素にマッチします。`.card:has(img)` と書けば『img を子孫に持つ .card』だけが対象になります。否定は `:not(:has(img))` のように `:not()` と組み合わせて表現します。\n\nDOM の構造による分岐がスタイルだけで書けるので、テンプレート側のクラス管理が減り、コンポーネントがコンテンツに自律的に追随できます。",
+      "code": {
+        "lang": "css",
+        "src": ".card:has(img)        { padding: 0; }\n.card:not(:has(img))  { padding: 16px; }\n\n/* フォームに不正な入力があるときだけカードを赤枠 */\n.card:has(:invalid) {\n  outline: 2px solid red;\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — :has()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+        }
+      ]
+    },
+    {
+      "heading": "兄弟や任意の祖先も条件にできる",
+      "body": "`:has()` のセレクタには子セレクタ（>）や隣接兄弟（+, ~）も書けます。`label:has(+ input:focus)` で『直後の input が focus されている label』を選択できます。\n\nこれにより『ラベルにフォーカス強調を付ける』『チェック済みのチェックボックスを持つ親をハイライトする』といったインタラクションが、JS なしで成立します。",
+      "code": {
+        "lang": "css",
+        "src": "/* 入力にフォーカスが当たっているラベルを強調 */\nlabel:has(+ input:focus) { color: var(--color-primary); }\n\n/* チェック済みカードを強調 */\n.choice:has(> input:checked) {\n  background: #e6f7ff;\n  border-color: var(--color-primary);\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — :has() — Combinators",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+        }
+      ]
+    },
+    {
+      "heading": "詳細度と書きすぎ注意",
+      "body": "`:has()` の詳細度は『その中で最も強いセレクタの詳細度』に従います。`.card:has(#id)` と書くと ID セレクタ分の詳細度が乗るので、意図せず勝ちすぎるリスクがあります。シンプルなクラス／要素セレクタを引数に保つのが基本です。\n\nまた、`:has()` は深いツリーを走査するため、何度もネストしたり巨大なセレクタを書くとパフォーマンス影響が出ます。実用上は問題になりにくいですが、巨大な v-for リストの全要素に複雑な :has を当てるような書き方は控えるのが無難です。",
+      "code": {
+        "lang": "css",
+        "src": "/* ❌ ID が混じると詳細度が跳ね上がる */\n.section:has(#hero) { background: red; }\n\n/* ✅ クラスだけで保つ */\n.section:has(.hero) { background: red; }"
+      },
+      "sources": [
+        {
+          "title": "MDN — :has() — Specificity",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+        }
+      ]
+    },
+    {
+      "heading": ":has() で書ける／書けないもの",
+      "body": "`:has()` の引数には基本的に通常のセレクタが書けますが、`:has()` 自体の **ネスト**（`:has(:has(...))`）や、特定の擬似要素（`::before` 等）は使えません。また、引数内で擬似要素を持つことはできません。\n\n一方、`:not(:has(.foo))` で『.foo を持たない要素』、`form:has(.error) button[type=submit]` で『エラーを含むフォーム内の送信ボタン』など、組み合わせの自由度は高いです。",
+      "code": {
+        "lang": "css",
+        "src": "/* 送信ボタンを、フォームにエラーがあるとき無効化見た目に */\nform:has(.error) button[type='submit'] {\n  opacity: 0.5;\n  pointer-events: none;\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — :has() — Limitations",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のセレクタが選択するのは？",
+      "code": {
+        "lang": "css",
+        "src": ".card:has(img) { /* ... */ }"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": ".card の直下にある img 要素",
+          "isCorrect": false,
+          "explanation": "それは .card > img の挙動。:has() は子孫を条件にして親自身を選ぶ。"
+        },
+        {
+          "id": "b",
+          "label": "img を子孫に含む .card 要素",
+          "isCorrect": true,
+          "explanation": "正解。:has() の引数を子孫として持つ要素にマッチする。"
+        },
+        {
+          "id": "c",
+          "label": ".card クラスを持つ img 要素",
+          "isCorrect": false,
+          "explanation": "img に .card クラスは付かない。"
+        },
+        {
+          "id": "d",
+          "label": "img の親が .card である img 要素",
+          "isCorrect": false,
+          "explanation": "選択対象は .card 側であって img ではない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — :has()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のセレクタが効くのはどの状況？",
+      "code": {
+        "lang": "css",
+        "src": "label:has(+ input:focus) { color: blue; }"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "label の直後の input にフォーカスがあるとき、その label が青になる",
+          "isCorrect": true,
+          "explanation": "正解。:has() の中で隣接兄弟 + を使い、直後 input の :focus 状態を条件にしている。"
+        },
+        {
+          "id": "b",
+          "label": "label がフォーカスされたとき青になる",
+          "isCorrect": false,
+          "explanation": "label 自体の :focus ではない。input の状態で label を変える典型パターン。"
+        },
+        {
+          "id": "c",
+          "label": "label の中にある input にフォーカスがあるとき青になる",
+          "isCorrect": false,
+          "explanation": "+ は隣接兄弟。子孫ではない。"
+        },
+        {
+          "id": "d",
+          "label": "input にフォーカスがあるとき input 自身が青になる",
+          "isCorrect": false,
+          "explanation": "セレクタは label 側を選択している。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — :has() with sibling combinator",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "送信ボタンを『フォーム内に妥当でない入力があるとき』だけ無効化見た目にしたい。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "form:has(:invalid) button[type=submit] { opacity: .5; pointer-events: none; }",
+          "isCorrect": true,
+          "explanation": "正解。:has(:invalid) でフォーム内の不正入力を検知し、CSS だけで送信ボタンの見た目を変えられる。"
+        },
+        {
+          "id": "b",
+          "label": "JS で input の input イベントを毎回監視して button.disabled を切り替える",
+          "isCorrect": false,
+          "explanation": "CSS だけで済む場面に JS を持ち込む必要は薄い。実装が増える。"
+        },
+        {
+          "id": "c",
+          "label": "全 form に :has(:invalid) を直接書くのではなく、:invalid 単体で input をハイライトするだけにとどめる",
+          "isCorrect": false,
+          "explanation": "input のハイライトと、送信ボタンの状態反映は別要件。両方欲しいときは :has() が最適。"
+        },
+        {
+          "id": "d",
+          "label": "form の class に valid / invalid を Vue 側で付け替えて、CSS で切り替える",
+          "isCorrect": false,
+          "explanation": "動くが、ブラウザの :invalid 状態を再実装することになり冗長。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — :invalid",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:invalid"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のセレクタが持つ問題として正しいのは？",
+      "code": {
+        "lang": "css",
+        "src": ".panel:has(#critical) { background: red; }"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "ID セレクタが混ざるため詳細度が高くなり、後続スタイルで上書きしづらくなる",
+          "isCorrect": true,
+          "explanation": "正解。:has() の中の最大詳細度がそのまま外側に影響する。ID を使うと他のスタイルとの競争が崩れやすい。"
+        },
+        {
+          "id": "b",
+          "label": ":has() の中で ID セレクタは構文エラーになる",
+          "isCorrect": false,
+          "explanation": "構文上は許される。挙動の問題が起きるだけ。"
+        },
+        {
+          "id": "c",
+          "label": ":has() は ID をマッチできない",
+          "isCorrect": false,
+          "explanation": "マッチはできる。詳細度の問題が残る。"
+        },
+        {
+          "id": "d",
+          "label": ":has() は :critical という標準クラスとしか動かない",
+          "isCorrect": false,
+          "explanation": "そのような制約はない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — :has() — Specificity",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      ":has() は『子孫として X を持つ要素』を選択する擬似クラス",
+      "兄弟結合子（+, ~）も書けるので、隣接要素の状態に応じた親スタイル変更ができる",
+      "詳細度は引数のうち最大のセレクタに従う。ID を混ぜると勝ちすぎる",
+      "フォームの妥当性反映や画像有無の分岐など、JS を必要としないインタラクションが多数書ける"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — :has()",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+      },
+      {
+        "title": "web.dev — :has()",
+        "url": "https://web.dev/articles/has-parent-selector"
+      }
+    ]
+  }
+}

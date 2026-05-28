@@ -1,0 +1,258 @@
+{
+  "id": "modern-js.equality-coercion",
+  "version": 1,
+  "title": "== / === と型強制",
+  "estimatedMinutes": 5,
+  "tags": ["javascript", "coercion"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "== は『型を揃えてから比較する』、=== は『型も含めて比較する』",
+    "body": "JavaScript の比較演算子には `==`（loose equality）と `===`（strict equality）があります。`==` は両辺の型が違うと『型強制（coercion）』を行ってから比較し、`===` は型が違えば即座に false を返します。実務では基本 `===` を使い、`== null` だけ意図的に使うのが定石です。型強制の挙動を一通り把握しておくと、他人のコードに残った `==` を正しく読み解けます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "===（厳密等価）の基本",
+      "body": "`===` は型と値の両方を比較し、どちらかでも違えば false。`NaN === NaN` は false（NaN は自分とも等しくない）という独自仕様だけ覚えておけば、ほぼ素直な挙動です。NaN かどうかは `Number.isNaN(x)` で判定するのが安全です。\n\n配列やオブジェクトは『参照の同一性』で比較されます。中身が同じでも別インスタンスなら `===` は false です。",
+      "code": {
+        "lang": "ts",
+        "src": "1 === 1            // true\n1 === '1'          // false（型が違う）\nNaN === NaN        // false\nNumber.isNaN(NaN)  // true\n\nconst a = { x: 1 }\nconst b = { x: 1 }\na === b            // false（別参照）\na === a            // true"
+      },
+      "sources": [
+        {
+          "title": "MDN — Strict equality (===)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Strict_equality"
+        }
+      ]
+    },
+    {
+      "heading": "==（緩い等価）の型強制ルール",
+      "body": "`==` は両辺の型が違う場合に次の規則で揃えてから比較します（要点）：\n\n- 数値と文字列 → 文字列を数値に変換\n- boolean → 数値に変換（true → 1, false → 0）\n- オブジェクトと数値／文字列 → オブジェクトを `valueOf()`/`toString()` でプリミティブに変換\n- null と undefined → 互いに ==（他のものとは ==）\n\n結果として `'0' == false`（true）、`[] == false`（true）、`[] == ![]`（true）など直感に反するケースが多発します。意図的な `== null` を除いて使わないのが現実的な指針です。",
+      "code": {
+        "lang": "ts",
+        "src": "0 == '0'          // true（'0' → 0）\nfalse == 0        // true（false → 0）\nnull == undefined // true\nnull == 0         // false（特例で coercion されない）\n'' == 0           // true\n[] == false       // true（[] → '' → 0、false → 0）"
+      },
+      "sources": [
+        {
+          "title": "MDN — Equality (==)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Equality"
+        },
+        {
+          "title": "MDN — Equality comparisons and sameness",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Equality_comparisons_and_sameness"
+        }
+      ]
+    },
+    {
+      "heading": "唯一の例外: == null",
+      "body": "`x == null` は『x が null か undefined』を 1 つの式で判定できる定石です。`x === null || x === undefined` の意味になります。多くの ESLint ルール（eqeqeq）も `== null` のみ例外で許容するオプションを持っています。\n\nそれ以外の `==` は読み手の認知コストが高く、`===` で書くのが業界標準です。",
+      "code": {
+        "lang": "ts",
+        "src": "function isNil(x: unknown) {\n  return x == null  // null か undefined の両方を 1 行で\n}\n\nisNil(null)       // true\nisNil(undefined)  // true\nisNil(0)          // false"
+      },
+      "sources": [
+        {
+          "title": "ESLint — eqeqeq",
+          "url": "https://eslint.org/docs/latest/rules/eqeqeq"
+        }
+      ]
+    },
+    {
+      "heading": "Truthy / Falsy と if 条件",
+      "body": "if や ` ? : ` で値を直接条件にすると **truthy / falsy 判定** が行われます。falsy なのは `false / 0 / -0 / 0n / '' / null / undefined / NaN` の 7 つだけで、それ以外（空配列・空オブジェクト・'0' 等）はすべて truthy です。\n\n空配列が truthy になる点は要注意で、「リストが空かどうか」を判定したいときは `arr.length === 0` を使います。`if (arr)` は『arr が定義されているか』の判定でしかありません。",
+      "code": {
+        "lang": "ts",
+        "src": "Boolean([])    // true（empty array is truthy）\nBoolean({})    // true\nBoolean('0')   // true\nBoolean(0)     // false\nBoolean('')    // false\nBoolean(null)  // false\n\n// ❌ 空かどうかの判定にならない\nif (arr) doSomething()\n\n// ✅\nif (arr.length === 0) doSomething()"
+      },
+      "sources": [
+        {
+          "title": "MDN — Truthy",
+          "url": "https://developer.mozilla.org/en-US/docs/Glossary/Truthy"
+        },
+        {
+          "title": "MDN — Falsy",
+          "url": "https://developer.mozilla.org/en-US/docs/Glossary/Falsy"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の評価結果として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "'0' == false"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "true（'0' → 0、false → 0）",
+          "isCorrect": true,
+          "explanation": "正解。両辺とも数値 0 に強制されて等しくなる。読みづらいので === の利用を推奨。"
+        },
+        {
+          "id": "b",
+          "label": "false",
+          "isCorrect": false,
+          "explanation": "緩い等価では同値とみなされる。"
+        },
+        {
+          "id": "c",
+          "label": "TypeError",
+          "isCorrect": false,
+          "explanation": "型強制は throw しない。"
+        },
+        {
+          "id": "d",
+          "label": "undefined",
+          "isCorrect": false,
+          "explanation": "比較演算子は boolean を返す。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Equality (==)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Equality"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の評価結果として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "null == 0"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "true（どちらも falsy なので等しい）",
+          "isCorrect": false,
+          "explanation": "緩い等価は falsy 同士でも常に true にはならない。null と数値は特例で coercion されない。"
+        },
+        {
+          "id": "b",
+          "label": "false",
+          "isCorrect": true,
+          "explanation": "正解。null と undefined は互いに == しかせず、数値や文字列とは coercion されない仕様（特例）。"
+        },
+        {
+          "id": "c",
+          "label": "TypeError",
+          "isCorrect": false,
+          "explanation": "エラーは出ない。"
+        },
+        {
+          "id": "d",
+          "label": "NaN",
+          "isCorrect": false,
+          "explanation": "比較演算子は boolean を返す。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Equality comparisons and sameness",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Equality_comparisons_and_sameness"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "プロジェクトの新規コードで等価比較に使うべき演算子の方針として最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "原則 === を使い、null と undefined の両方を判定したいときだけ == null を使う",
+          "isCorrect": true,
+          "explanation": "正解。業界標準。ESLint eqeqeq の null 許容オプションと一致する。"
+        },
+        {
+          "id": "b",
+          "label": "短いから == を全部に使う",
+          "isCorrect": false,
+          "explanation": "型強制で予想外の挙動が出る。可読性も低い。"
+        },
+        {
+          "id": "c",
+          "label": "== と === は等価でほぼ同じなので、好みで選ぶ",
+          "isCorrect": false,
+          "explanation": "挙動が異なる。型強制の有無が大きな差。"
+        },
+        {
+          "id": "d",
+          "label": "全て === を使い、null チェックは x === null || x === undefined と書く",
+          "isCorrect": false,
+          "explanation": "動くが、== null の 1 行表記が業界で広く受け入れられている。冗長になる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "ESLint — eqeqeq (allow-null option)",
+          "url": "https://eslint.org/docs/latest/rules/eqeqeq#null"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "配列 arr が空かどうかを判定するコードとして適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "if (!arr) { /* empty */ }",
+          "isCorrect": false,
+          "explanation": "空配列は truthy。!arr は『arr が undefined/null』の判定。"
+        },
+        {
+          "id": "b",
+          "label": "if (arr.length === 0) { /* empty */ }",
+          "isCorrect": true,
+          "explanation": "正解。空かどうかは length で判定する。arr が undefined のリスクがあるなら if (arr?.length === 0) と書く。"
+        },
+        {
+          "id": "c",
+          "label": "if (arr == false) { /* empty */ }",
+          "isCorrect": false,
+          "explanation": "[] == false は true になるが、意図が読み取れない。コードの可読性が低い。"
+        },
+        {
+          "id": "d",
+          "label": "if (arr == []) { /* empty */ }",
+          "isCorrect": false,
+          "explanation": "配列の比較は参照で行われる。別インスタンスなので常に false。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.length",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/length"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "=== は型と値の両方を比較。== は型強制を挟むため挙動が予測しづらい",
+      "唯一の例外として == null（null と undefined を 1 行で判定）は許容するのが業界標準",
+      "if 条件の真偽は truthy/falsy 判定。空配列・空オブジェクトは truthy（要注意）",
+      "オブジェクト・配列の === は参照同一性。中身一致では true にならない"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Equality comparisons and sameness",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Equality_comparisons_and_sameness"
+      },
+      {
+        "title": "MDN — Truthy / Falsy",
+        "url": "https://developer.mozilla.org/en-US/docs/Glossary/Truthy"
+      }
+    ]
+  }
+}

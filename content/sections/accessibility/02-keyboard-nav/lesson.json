@@ -1,0 +1,250 @@
+{
+  "id": "accessibility.keyboard-nav",
+  "version": 1,
+  "title": "キーボード操作とフォーカス管理",
+  "estimatedMinutes": 6,
+  "tags": ["a11y", "keyboard", "focus"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "マウスなしで使えるか、を最初の検証軸に",
+    "body": "アクセシビリティの基本テストは『Tab キーだけで全ての操作ができるか』。フォーカスが見える、見えるべき順で動く、モーダルを閉じれば戻ってくる、といった挙動が崩れているサイトは非常に多くあります。設計時に意識する Vue / HTML の基本ルールはそれほど多くないので、最初に押さえれば一気に底上げできる領域です。"
+  },
+
+  "explanations": [
+    {
+      "heading": "Tab 順は DOM 順、tabindex は最小限で",
+      "body": "デフォルトでは『Tab キーで focus 可能な要素を DOM の出現順に巡回』します。focus 可能なのは button / a[href] / input / select / textarea / iframe / contenteditable / tabindex 付き要素 など。\n\n- `tabindex=\"0\"`: 通常の Tab 順に加える（既定で focus できない要素を focusable にする）\n- `tabindex=\"-1\"`: Tab では飛ばさないが、JS の `el.focus()` では当てられる（モーダル open 時の最初のフォーカス先に便利）\n- `tabindex=\"1\"` 以上の正の値: DOM 順を無視して優先順位を付ける（**ほぼアンチパターン**）\n\n基本は 0 と -1 のみで足ります。正の値は管理が破綻するので避けます。",
+      "code": {
+        "lang": "html",
+        "src": "<!-- ✅ button は何もしなくても tab focus できる -->\n<button>OK</button>\n\n<!-- ✅ -1 は JS focus 専用 -->\n<div tabindex=\"-1\" ref=\"dialog\">...</div>\n\n<!-- ❌ tabindex=\"3\" のような正の値 -->"
+      },
+      "sources": [
+        {
+          "title": "MDN — tabindex",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/tabindex"
+        }
+      ]
+    },
+    {
+      "heading": "focus リングを消さない",
+      "body": "古い CSS リセットでは `outline: none` で focus リングを消しがちですが、これは **キーボード利用者から focus 位置を奪う行為** です。マウスでだけリングを消したいなら `:focus-visible` を使います。\n\n`:focus-visible` は『キーボード操作などで focus した時だけ』マッチする擬似クラスで、マウスクリックでは適用されません。Tailwind 等の最近のリセットも `:focus-visible` ベースに移行しています。",
+      "code": {
+        "lang": "css",
+        "src": "/* ❌ どんな入力でも focus が見えなくなる */\n:focus { outline: none; }\n\n/* ✅ マウス時は消す、キーボードでは見せる */\n:focus { outline: none; }\n:focus-visible {\n  outline: 2px solid var(--color-primary);\n  outline-offset: 2px;\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — :focus-visible",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:focus-visible"
+        }
+      ]
+    },
+    {
+      "heading": "モーダルでのフォーカストラップ",
+      "body": "モーダルダイアログでは『中の要素を Tab で巡回し、外に出ないようにする』必要があります。これを **focus trap** と呼びます。手動で実装するのは骨が折れますが、`<dialog>` 要素や `showModal()` メソッドを使えばブラウザ標準でトラップが効きます。\n\n手動実装する場合は、open 時に最初の focusable 要素へフォーカス、Tab / Shift+Tab で末尾と先頭を循環、Esc で close、close 時に元の trigger 要素へ focus 復帰、を実装します。",
+      "code": {
+        "lang": "html",
+        "src": "<dialog ref=\"dlg\">\n  <h2>確認</h2>\n  <button @click=\"close\">閉じる</button>\n</dialog>\n\n<script setup>\nconst dlg = useTemplateRef('dlg')\nfunction open() { dlg.value?.showModal() } // showModal なら focus trap & Esc 標準対応\n</script>"
+      },
+      "sources": [
+        {
+          "title": "MDN — <dialog>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dialog"
+        },
+        {
+          "title": "MDN — HTMLDialogElement.showModal()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal"
+        }
+      ]
+    },
+    {
+      "heading": "Skip link — 本文へジャンプ",
+      "body": "ヘッダーやナビが長いページでは、毎ページ Tab を何度も押さないと本文に辿り着けません。これを救うのが『skip link』：ページの先頭に **キーボードでだけ表示される**『本文へスキップ』リンクを置く慣習です。\n\nアクセシブルな実装の典型：通常は CSS で画面外に飛ばし、`:focus` でだけ画面に表示する。Bootstrap・GitHub・GOV.UK など多くのサイトが採用しています。",
+      "code": {
+        "lang": "html",
+        "src": "<a class=\"skip-link\" href=\"#main\">本文へスキップ</a>\n\n<style>\n.skip-link {\n  position: absolute;\n  inset-inline-start: -9999px;\n}\n.skip-link:focus {\n  inset-inline-start: 0;\n  z-index: 100;\n}\n</style>"
+      },
+      "sources": [
+        {
+          "title": "MDN — Skip links",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/a#skip_links"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の CSS の問題点として正しいのは？",
+      "code": {
+        "lang": "css",
+        "src": "*:focus { outline: none; }"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "問題なし、マウスでもキーボードでも見た目が綺麗",
+          "isCorrect": false,
+          "explanation": "キーボード利用者から focus 位置が見えなくなる。"
+        },
+        {
+          "id": "b",
+          "label": "キーボード操作で focus 位置がわからなくなる。:focus-visible だけ outline を残すのが正解",
+          "isCorrect": true,
+          "explanation": "正解。マウスのときだけ消したいなら :focus-visible で分岐する。"
+        },
+        {
+          "id": "c",
+          "label": "outline がブラウザのバグを引き起こす",
+          "isCorrect": false,
+          "explanation": "そのようなバグは無い。"
+        },
+        {
+          "id": "d",
+          "label": "scripts が動かなくなる",
+          "isCorrect": false,
+          "explanation": "CSS と JS は別系統。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — :focus-visible",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/:focus-visible"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "design-judgment-4choice",
+      "prompt": "div で作った独自モーダルを開いた直後にやるべき focus 制御は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "モーダル内の最初の focusable 要素（または dialog 自身）に focus を当てる",
+          "isCorrect": true,
+          "explanation": "正解。スクリーンリーダーとキーボードの両方に『今ここを操作している』を伝えるために必要。"
+        },
+        {
+          "id": "b",
+          "label": "何もしない（自然に focus が移る）",
+          "isCorrect": false,
+          "explanation": "div には自動 focus 機能がない。モーダル外の状態から操作開始してしまう。"
+        },
+        {
+          "id": "c",
+          "label": "ページ全体に tabindex=\"-1\" を当てて Tab を無効化する",
+          "isCorrect": false,
+          "explanation": "Tab を奪うとモーダル内のフォームも操作できなくなる。"
+        },
+        {
+          "id": "d",
+          "label": "body の class に modal-open を付けるだけ",
+          "isCorrect": false,
+          "explanation": "見た目だけの対処。focus は移らない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "WAI-ARIA APG — Modal Dialog",
+          "url": "https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "code-reading-4choice",
+      "prompt": "tabindex=\"3\" の役割として正しいのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "Tab 順を DOM 順より早く 3 番目に持ってくる",
+          "isCorrect": true,
+          "explanation": "正解。正の値は DOM 順を無視して数値順に巡回するが、管理が破綻するためアンチパターン。0 または -1 のみ使う。"
+        },
+        {
+          "id": "b",
+          "label": "Tab で focus できないようにする",
+          "isCorrect": false,
+          "explanation": "それは tabindex=\"-1\"（ただし JS の focus は可能）。"
+        },
+        {
+          "id": "c",
+          "label": "tab キーを 3 回押すと反応するようにする",
+          "isCorrect": false,
+          "explanation": "そのような挙動はない。"
+        },
+        {
+          "id": "d",
+          "label": "ARIA roles のレベル 3 を意味する",
+          "isCorrect": false,
+          "explanation": "そのような関連はない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — tabindex",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/tabindex"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "標準の <dialog> 要素を showModal() で開く利点として最も正しいのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "focus trap、Esc で閉じる、背景 inert、フォーカス自動配置が標準で揃う",
+          "isCorrect": true,
+          "explanation": "正解。HTML 標準のモーダル挙動がブラウザ実装で揃う。自前実装で漏れがちな細部まで保証される。"
+        },
+        {
+          "id": "b",
+          "label": "showModal() のほうがアニメーションが豊富",
+          "isCorrect": false,
+          "explanation": "アニメーションは CSS 次第。標準の優位点ではない。"
+        },
+        {
+          "id": "c",
+          "label": "<dialog> は常に SEO 上有利",
+          "isCorrect": false,
+          "explanation": "そのような効果はない。"
+        },
+        {
+          "id": "d",
+          "label": "JavaScript なしで開閉が動く",
+          "isCorrect": false,
+          "explanation": "open / close は JS 経由。標準で備わる挙動はアクセシビリティ機能側。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — HTMLDialogElement.showModal()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "Tab 順は DOM 順が基本。tabindex は 0 と -1 だけ使い、正の値は避ける",
+      "outline: none は :focus-visible で分岐。キーボード利用時の focus 表示を残す",
+      "モーダルは <dialog>.showModal() で focus trap・Esc・背景 inert を標準実装に任せる",
+      "skip link を入れると、長いヘッダーをスキップして本文へ一気にジャンプできる"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Keyboard navigation",
+        "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Accessibility/Keyboard"
+      },
+      {
+        "title": "WAI-ARIA APG — Dialog Pattern",
+        "url": "https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/"
+      }
+    ]
+  }
+}

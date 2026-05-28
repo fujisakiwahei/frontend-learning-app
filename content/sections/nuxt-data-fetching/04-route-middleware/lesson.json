@@ -1,0 +1,258 @@
+{
+  "id": "nuxt-data-fetching.route-middleware",
+  "version": 1,
+  "title": "ルートミドルウェアと認証ガード",
+  "estimatedMinutes": 6,
+  "tags": ["nuxt", "middleware", "auth"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "ページに入る前に挟む処理",
+    "body": "Nuxt のルートミドルウェアは、ページコンポーネントの setup が走る前に呼ばれる関数です。認証ガード（未ログインなら /login へ）、特権チェック、リダイレクト、計測トリガなどに使います。global（全ページ）／named（明示指定）／inline（ページ内で定義）の 3 種類があり、SSR とクライアント双方で実行される点が判断のキモになります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "3 種類のミドルウェア",
+      "body": "Nuxt のミドルウェアは置き場所と適用範囲で分けられます：\n\n- **global**: `middleware/<name>.global.ts`。すべてのルート遷移で走る\n- **named**: `middleware/<name>.ts`。ページ側で `definePageMeta({ middleware: ['<name>'] })` と明示したルートだけで走る\n- **inline**: ページ内 `definePageMeta({ middleware: defineNuxtRouteMiddleware((to, from) => {...}) })` で直接渡す\n\n認証ガードのように『全ページに広く効かせたいが除外は少ない』は global、特定ページだけのチェックは named、その場限りは inline、と憶えます。",
+      "code": {
+        "lang": "ts",
+        "src": "// middleware/auth.global.ts\nexport default defineNuxtRouteMiddleware((to) => {\n  const me = useState('me')\n  if (!me.value && to.path !== '/login') {\n    return navigateTo('/login')\n  }\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Route Middleware",
+          "url": "https://nuxt.com/docs/guide/directory-structure/middleware"
+        }
+      ]
+    },
+    {
+      "heading": "navigateTo / abortNavigation",
+      "body": "ミドルウェアでリダイレクトしたいときは **return navigateTo('/login')** を使います。return を付けないと処理が継続してリダイレクトが効かないことがあるため、必ず return します。\n\n何も返さなければ通常通り遷移を続行、`abortNavigation()` を返せばエラーで遷移を打ち切ります（カスタムエラー画面が出る）。`navigateTo` には `{ replace: true, redirectCode: 302 }` などのオプションも渡せます。",
+      "code": {
+        "lang": "ts",
+        "src": "export default defineNuxtRouteMiddleware((to, from) => {\n  if (to.params.id === 'banned') {\n    return abortNavigation('このページは閲覧できません')\n  }\n  if (to.path === '/old') {\n    return navigateTo('/new', { redirectCode: 301 })\n  }\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — navigateTo()",
+          "url": "https://nuxt.com/docs/api/utils/navigate-to"
+        },
+        {
+          "title": "Nuxt — abortNavigation()",
+          "url": "https://nuxt.com/docs/api/utils/abort-navigation"
+        }
+      ]
+    },
+    {
+      "heading": "サーバとクライアント両方で走ることに注意",
+      "body": "ルートミドルウェアは **SSR の初回リクエストではサーバで**、**クライアント遷移ではブラウザで** 走ります。つまり同じコードを両方の環境で動かす前提で書く必要があります。`window` や `localStorage` を直接読むコードはサーバで落ちるため、`if (import.meta.client)` ガードを入れるか、Cookie ベース（`useCookie`）に寄せます。\n\n認証情報を保持する場所は Cookie が無難です。useState は SSR セーフな共有状態ですが、ブラウザのストレージとは別物で、リロード時には初期化されます。",
+      "code": {
+        "lang": "ts",
+        "src": "export default defineNuxtRouteMiddleware((to) => {\n  // ✅ Cookie ベース → サーバ/クライアント両対応\n  const token = useCookie('token').value\n  if (!token && to.path !== '/login') return navigateTo('/login')\n\n  // ❌ サーバで ReferenceError: localStorage is not defined\n  // const t = localStorage.getItem('token')\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — useCookie",
+          "url": "https://nuxt.com/docs/api/composables/use-cookie"
+        },
+        {
+          "title": "Nuxt — Route Middleware — Server / Client",
+          "url": "https://nuxt.com/docs/guide/directory-structure/middleware#middleware-order"
+        }
+      ]
+    },
+    {
+      "heading": "ミドルウェアの実行順と非同期",
+      "body": "ミドルウェアは登録順に直列で実行されます。global → named（指定順）の順で走り、いずれかが `navigateTo` / `abortNavigation` を return した時点で残りはスキップされます。\n\nミドルウェア内では `await` も使えます。たとえばユーザー情報を取得してからガード判定したいときは `await $fetch('/api/me')` を待ち、その結果で判断できます。ただし重い fetch を毎ページで挟むと体感が悪くなるので、初回マウント時に useState に格納してキャッシュするのが定石です。",
+      "code": {
+        "lang": "ts",
+        "src": "export default defineNuxtRouteMiddleware(async (to) => {\n  const me = useState('me', () => null)\n  if (!me.value) {\n    me.value = await $fetch('/api/me').catch(() => null)\n  }\n  if (!me.value && to.meta.requiresAuth) {\n    return navigateTo('/login')\n  }\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Route Middleware — Async",
+          "url": "https://nuxt.com/docs/guide/directory-structure/middleware"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のミドルウェアの問題点として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "// middleware/auth.global.ts\nexport default defineNuxtRouteMiddleware((to) => {\n  const token = localStorage.getItem('token')\n  if (!token) navigateTo('/login')\n})"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "問題なし",
+          "isCorrect": false,
+          "explanation": "2 つの致命的な問題がある。"
+        },
+        {
+          "id": "b",
+          "label": "navigateTo を return していない + SSR で localStorage が落ちる、の 2 点",
+          "isCorrect": true,
+          "explanation": "正解。return を付けないとリダイレクトが効かない場合がある。さらに localStorage はサーバに存在しないので SSR でクラッシュする。useCookie + return navigateTo に書き換えるべき。"
+        },
+        {
+          "id": "c",
+          "label": "ミドルウェアでは navigateTo を呼んではいけない",
+          "isCorrect": false,
+          "explanation": "navigateTo はミドルウェアでの正規ルート。"
+        },
+        {
+          "id": "d",
+          "label": ".global.ts は使えないファイル名",
+          "isCorrect": false,
+          "explanation": "global ミドルウェアの正式な命名規則。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Route Middleware",
+          "url": "https://nuxt.com/docs/guide/directory-structure/middleware"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "design-judgment-4choice",
+      "prompt": "ログイン必須のページが 20 件あり、未ログインなら /login へ。少数の公開ページ（/login、/signup、/legal）は除外したい。最も適切な構成は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "global ミドルウェアで除外パスを判定して通す",
+          "isCorrect": true,
+          "explanation": "正解。広く効かせる + 例外が少ないなら global。除外リストは中央集権で管理できて、新規ページ追加時の認証漏れも起きにくい。"
+        },
+        {
+          "id": "b",
+          "label": "20 ページそれぞれに inline ミドルウェアを書く",
+          "isCorrect": false,
+          "explanation": "重複が大きく、認証漏れの温床になる。"
+        },
+        {
+          "id": "c",
+          "label": "named ミドルウェアを作り、20 ページに definePageMeta で個別指定",
+          "isCorrect": false,
+          "explanation": "global より明示的だが、新規ページで指定漏れが起きやすい。除外側を管理するほうが安全。"
+        },
+        {
+          "id": "d",
+          "label": "Pinia store の watch で route を見て手動でリダイレクト",
+          "isCorrect": false,
+          "explanation": "ミドルウェアの仕事を再発明している。SSR 経路も外れるので不適切。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Route Middleware",
+          "url": "https://nuxt.com/docs/guide/directory-structure/middleware"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "code-reading-4choice",
+      "prompt": "次のミドルウェアは何回 `/api/me` を叩く？（同セッション内で 5 ページ遷移する想定）",
+      "code": {
+        "lang": "ts",
+        "src": "export default defineNuxtRouteMiddleware(async () => {\n  const me = useState('me', () => null)\n  if (!me.value) {\n    me.value = await $fetch('/api/me')\n  }\n})"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "1 回（最初の遷移で取得後、useState にキャッシュされる）",
+          "isCorrect": true,
+          "explanation": "正解。useState はキー単位で共有される。1 度埋めれば以後のチェックはキャッシュヒットして fetch しない。"
+        },
+        {
+          "id": "b",
+          "label": "5 回（遷移のたびに毎回叩く）",
+          "isCorrect": false,
+          "explanation": "if (!me.value) のガードがあるので 2 回目以降は叩かれない。"
+        },
+        {
+          "id": "c",
+          "label": "0 回（useState の初期化関数が return null なので me.value は常に null）",
+          "isCorrect": false,
+          "explanation": "1 回目で me.value に代入されるので 0 回ではない。"
+        },
+        {
+          "id": "d",
+          "label": "SSR とクライアントで二重実行されるので 2 回",
+          "isCorrect": false,
+          "explanation": "useState の payload 引き継ぎがあるため、SSR で取得済みならクライアントでは fetch されない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — useState",
+          "url": "https://nuxt.com/docs/api/composables/use-state"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "1 ページだけ管理者権限を要求したい。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "named ミドルウェア admin を作り、対象ページの definePageMeta に { middleware: 'admin' } を指定",
+          "isCorrect": true,
+          "explanation": "正解。1 ページだけの限定的なガードは named ミドルウェアが最適。意図がコード上に明示され、認証経路の追跡もしやすい。"
+        },
+        {
+          "id": "b",
+          "label": "global ミドルウェアに path === '/admin' の分岐を追加",
+          "isCorrect": false,
+          "explanation": "global は全ページの中央集権ガード用。個別ルールを足すと密結合になり保守性が落ちる。"
+        },
+        {
+          "id": "c",
+          "label": "ページ内の onMounted でロールをチェックして navigateTo",
+          "isCorrect": false,
+          "explanation": "SSR でガードできず、ページ内容が一瞬見える可能性がある。"
+        },
+        {
+          "id": "d",
+          "label": "server/api 側でロール判定し、フロントは何もしない",
+          "isCorrect": false,
+          "explanation": "API は守れるがページは表示される。両方守る前提でフロントにもガードを置く。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — definePageMeta",
+          "url": "https://nuxt.com/docs/api/utils/define-page-meta"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "ミドルウェアは global / named / inline の 3 種類。広く効かせるなら global、限定なら named",
+      "リダイレクトは return navigateTo('/x')。return を忘れると効かないことがある",
+      "サーバとクライアントの両方で走る。localStorage 直接参照は避け、useCookie / useState で受け渡す",
+      "重い fetch は useState にキャッシュして遷移ごとの再取得を避ける"
+    ],
+    "furtherReading": [
+      {
+        "title": "Nuxt — Route Middleware",
+        "url": "https://nuxt.com/docs/guide/directory-structure/middleware"
+      },
+      {
+        "title": "Nuxt — navigateTo()",
+        "url": "https://nuxt.com/docs/api/utils/navigate-to"
+      }
+    ]
+  }
+}

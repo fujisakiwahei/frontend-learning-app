@@ -1,0 +1,258 @@
+{
+  "id": "modern-css.cascade-layers",
+  "version": 1,
+  "title": "カスケードレイヤー（@layer）",
+  "estimatedMinutes": 6,
+  "tags": ["css", "cascade", "layers"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "詳細度との戦いを終わらせる",
+    "body": "従来の CSS は『詳細度（specificity）→ 出現順』で優先度が決まり、ライブラリのスタイルを上書きするために `!important` を乱発したり、無意味に詳細度を上げたりしがちでした。`@layer` は『レイヤーの宣言順』が **詳細度より先に勝負を決める**仕組みで、ベース／コンポーネント／ユーティリティのような階層を意図通りに重ねられるようになります。Chrome / Firefox / Safari でいずれも安定して使えます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "@layer の宣言と優先順位",
+      "body": "`@layer base, components, utilities;` のように最初に **レイヤーの順序** を宣言します。その後 `@layer base { ... }` のように各レイヤーの中身を定義します。\n\nスタイルの勝ち負けは次の順で決まります：\n\n1. レイヤー外（unlayered）のスタイルが最強\n2. 後に宣言されたレイヤーが、前のレイヤーより強い\n3. 同一レイヤー内なら従来通り詳細度＋出現順\n\nつまり『ライブラリは base レイヤーに入れ、自前のオーバライドは utilities に入れる』だけで、詳細度を気にせず安全に上書きできます。",
+      "code": {
+        "lang": "css",
+        "src": "@layer base, components, utilities;\n\n@layer base {\n  button { padding: 8px 12px; background: gray; }\n}\n\n@layer utilities {\n  /* base より後のレイヤー → 詳細度に関係なく勝つ */\n  .btn-primary { background: blue; }\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — @layer",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/@layer"
+        },
+        {
+          "title": "MDN — Cascade layers",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Cascade_layers"
+        }
+      ]
+    },
+    {
+      "heading": "サードパーティのインポートをレイヤーに入れる",
+      "body": "外部 CSS を取り込むときに `@import url('...') layer(vendor);` のように書くと、その CSS 全体を指定レイヤー内に丸ごと入れられます。デザイントークンやリセット、UI ライブラリ等を `vendor` / `reset` 等のレイヤーに分け、自前スタイルを上のレイヤーに置けば、ライブラリ更新で勝手にスタイルが上書きされる事故を防げます。\n\nレイヤー外のスタイルは依然として最強なので、外部 CSS が `!important` を多用している場合は注意が必要です。",
+      "code": {
+        "lang": "css",
+        "src": "@layer reset, vendor, base, components, utilities;\n\n@import url('modern-normalize.css') layer(reset);\n@import url('@my-ui/styles.css') layer(vendor);\n\n@layer base {\n  body { font-family: system-ui; }\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — @import",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/@import"
+        }
+      ]
+    },
+    {
+      "heading": "詳細度より弱い、!important より弱い",
+      "body": "レイヤーの優先度は通常宣言にのみ適用されます。`!important` の付いた宣言は **逆順** で勝負します（古いレイヤーの important が最強）。これは意図的な設計で、ベースのリセットなどがコンポーネント側の自由な上書きで崩れるのを防ぐためです。\n\nそのため『!important があるならレイヤーに頼らず、まず本当に必要か再検討する』のが現実的な指針です。",
+      "code": {
+        "lang": "css",
+        "src": "@layer base, utilities;\n\n@layer base {\n  /* 通常宣言なら utilities に負ける */\n  p { color: black; }\n  /* important なら base のほうが utilities より強い */\n  p { color: red !important; }\n}\n@layer utilities {\n  p { color: green !important; }\n}\n/* 結果: 赤 (!important では base が逆転して強い) */"
+      },
+      "sources": [
+        {
+          "title": "MDN — Cascade layers — !important",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Cascade_layers#important_rules"
+        }
+      ]
+    },
+    {
+      "heading": "実用パターン: reset → tokens → components → utilities",
+      "body": "MVP の頭で考えるべき構成はだいたいこの順番：\n\n1. `reset` レイヤー: モダンリセット（margin: 0 など）\n2. `tokens` レイヤー: CSS カスタムプロパティの定義（色・spacing 等）\n3. `base` レイヤー: 要素のデフォルトスタイル（h1, p, button など）\n4. `components` レイヤー: 各コンポーネントのスタイル\n5. `utilities` レイヤー: 単発の上書き用ユーティリティクラス\n\nこの順で並べておけば、コンポーネント内の宣言がベースを安全に上書きでき、最後のユーティリティでいつでも勝てる構造になります。",
+      "code": {
+        "lang": "css",
+        "src": "@layer reset, tokens, base, components, utilities;\n\n@layer tokens {\n  :root {\n    --color-primary: #1cb0f6;\n    --space-2: 8px;\n  }\n}"
+      },
+      "sources": [
+        {
+          "title": "web.dev — Cascade layers",
+          "url": "https://web.dev/articles/css-cascade-layers"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の CSS で <button class=\"btn\"> の背景色は最終的に何になる？",
+      "code": {
+        "lang": "css",
+        "src": "@layer base, components;\n\n@layer components {\n  .btn { background: blue; }\n}\n\n@layer base {\n  #app .btn { background: red; }\n}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "red（詳細度が高いので base が勝つ）",
+          "isCorrect": false,
+          "explanation": "レイヤー間では詳細度より宣言順が優先される。"
+        },
+        {
+          "id": "b",
+          "label": "blue（後に宣言された components レイヤーが勝つ）",
+          "isCorrect": true,
+          "explanation": "正解。@layer base, components の宣言順で components のほうが後。詳細度が低くても勝つ。"
+        },
+        {
+          "id": "c",
+          "label": "ブラウザの既定値",
+          "isCorrect": false,
+          "explanation": "両方とも明示宣言があるので既定値にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "transparent",
+          "isCorrect": false,
+          "explanation": "そのような既定もない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Cascade layers",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Cascade_layers"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の CSS の最終的な p の color は？",
+      "code": {
+        "lang": "css",
+        "src": "@layer a, b;\n@layer a { p { color: red !important; } }\n@layer b { p { color: blue !important; } }"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "red",
+          "isCorrect": true,
+          "explanation": "正解。!important が両方にある場合、レイヤーの優先度は逆転して 'より早く宣言されたレイヤーが強い' になる。a が勝つ。"
+        },
+        {
+          "id": "b",
+          "label": "blue",
+          "isCorrect": false,
+          "explanation": "通常宣言なら b が勝つが、両方とも !important なので a が勝つ。"
+        },
+        {
+          "id": "c",
+          "label": "ブラウザ既定",
+          "isCorrect": false,
+          "explanation": "両方とも明示宣言。"
+        },
+        {
+          "id": "d",
+          "label": "未定義動作",
+          "isCorrect": false,
+          "explanation": "仕様で定義されている挙動。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Cascade layers — !important",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Cascade_layers#important_rules"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "サードパーティ UI ライブラリの CSS を取り込みつつ、自前スタイルで安全に上書きしたい。最も妥当な構成は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "@layer vendor, app; に分け、ライブラリは layer(vendor) で import、自前は @layer app に書く",
+          "isCorrect": true,
+          "explanation": "正解。レイヤー宣言順で app が必ず勝つ。詳細度の競争が無くなり、ライブラリのアップデートで CSS 階層が壊れにくくなる。"
+        },
+        {
+          "id": "b",
+          "label": "自前スタイルに全部 !important を付ける",
+          "isCorrect": false,
+          "explanation": "短期的には効くが、コンポーネント間の上書きが地獄になる。"
+        },
+        {
+          "id": "c",
+          "label": "ID セレクタや >>> で詳細度を上げて勝つ",
+          "isCorrect": false,
+          "explanation": "詳細度競争の延命にしかならず、長期的に保守性が下がる。"
+        },
+        {
+          "id": "d",
+          "label": "ライブラリの CSS を全部書き換えて配布する",
+          "isCorrect": false,
+          "explanation": "アップデートの追従が破綻する。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "web.dev — Cascade layers",
+          "url": "https://web.dev/articles/css-cascade-layers"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次の CSS で h1 の color は？",
+      "code": {
+        "lang": "css",
+        "src": "@layer a;\n@layer a { h1 { color: red; } }\nh1 { color: blue; } /* レイヤー外 */"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "red",
+          "isCorrect": false,
+          "explanation": "レイヤー外のスタイルは『最強』ではないが、レイヤー内の通常宣言より強い。"
+        },
+        {
+          "id": "b",
+          "label": "blue",
+          "isCorrect": true,
+          "explanation": "正解。レイヤーに属さない通常宣言は、すべての通常レイヤーよりも優先度が高い。"
+        },
+        {
+          "id": "c",
+          "label": "ブラウザ既定",
+          "isCorrect": false,
+          "explanation": "両方とも明示宣言がある。"
+        },
+        {
+          "id": "d",
+          "label": "計算不能で transparent になる",
+          "isCorrect": false,
+          "explanation": "そのような挙動はない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Cascade layers — Specifying styles outside",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Cascade_layers"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "@layer はレイヤーの宣言順で勝負が決まる。詳細度より優先される",
+      "後に宣言されたレイヤーが強い（通常宣言）／ !important では逆順になる",
+      "レイヤー外の宣言はすべての通常レイヤーより強い",
+      "実用構成: reset → tokens → base → components → utilities の順で重ねる"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Cascade layers",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Cascade_layers"
+      },
+      {
+        "title": "web.dev — Cascade layers",
+        "url": "https://web.dev/articles/css-cascade-layers"
+      }
+    ]
+  }
+}

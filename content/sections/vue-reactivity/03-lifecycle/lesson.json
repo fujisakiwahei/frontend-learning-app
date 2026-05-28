@@ -1,0 +1,274 @@
+{
+  "id": "vue-reactivity.lifecycle",
+  "version": 1,
+  "title": "ライフサイクルフックと SSR / CSR の境界",
+  "estimatedMinutes": 7,
+  "tags": ["vue3", "lifecycle", "ssr"],
+  "prerequisites": ["vue-reactivity.ref-vs-reactive"],
+
+  "intro": {
+    "headline": "「どこで走るか」を意識する",
+    "body": "Vue 3 のライフサイクルフックは `setup` の同期実行中に登録します。SSR 環境（Nuxt 等）では `onMounted` などの『マウント以降のフック』はサーバでは呼ばれず、クライアントでハイドレート完了したあとに走ります。どのフックがサーバ／クライアントのどちらで動くかを取り違えると、DOM 参照が null になったり、window アクセスでクラッシュしたりします。"
+  },
+
+  "explanations": [
+    {
+      "heading": "主要フックの実行順と意味",
+      "body": "コンポーネントが画面に出るまでの代表フックは順に：\n\n- `setup`（=`<script setup>` の本体）: コンポーネント生成の最初に走る。同期処理だけがリアクティブな状態を確定させ、フック登録もここで行う\n- `onBeforeMount`: マウント直前、まだ DOM は生成されていない\n- `onMounted`: コンポーネントが DOM に挿入された直後。テンプレート ref（DOM ノード）が初めて参照可能\n- `onBeforeUpdate` / `onUpdated`: リアクティブな値の変化で再レンダーが走るとき、再レンダー前後\n- `onBeforeUnmount` / `onUnmounted`: コンポーネントが破棄されるとき\n\n`onUpdated` は再レンダーのたびに走り、状態を書き換えると無限ループになりやすいので副作用は基本 watch / watchEffect に寄せます。",
+      "code": {
+        "lang": "ts",
+        "src": "import { onMounted, onBeforeUnmount } from 'vue'\n\nonMounted(() => {\n  // DOM が出来上がっている。addEventListener や 3rd party 初期化はここで\n  window.addEventListener('resize', onResize)\n})\n\nonBeforeUnmount(() => {\n  // 後片付け。addEventListener は必ず removeEventListener と対で\n  window.removeEventListener('resize', onResize)\n})"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Lifecycle Hooks",
+          "url": "https://vuejs.org/guide/essentials/lifecycle.html"
+        },
+        {
+          "title": "Vue.js — onMounted()",
+          "url": "https://vuejs.org/api/composition-api-lifecycle.html#onmounted"
+        }
+      ]
+    },
+    {
+      "heading": "SSR ではマウント以降のフックは呼ばれない",
+      "body": "Nuxt や Vue 公式 SSR では、サーバ上で `setup` が実行されコンポーネントが HTML としてレンダーされます。`onBeforeMount` / `onMounted` / `onBeforeUnmount` / `onUnmounted` / `onUpdated` などの「DOM ライフサイクル系」のフックは **サーバでは実行されません**。\n\nつまり `onMounted` の中は実質「クライアント限定の処理を書く場所」になります。`window`・`document`・`localStorage`・3rd party の DOM ライブラリ初期化などはここに置きます。逆に `setup` の同期本体はサーバ／クライアント両方で走るので、ここに `window.xxx` を直接書くと SSR でクラッシュします。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ SSR で ReferenceError: window is not defined\n<script setup lang=\"ts\">\nconst width = ref(window.innerWidth) // setup 本体はサーバでも走る\n</script>\n\n// ✅ クライアント限定の処理は onMounted に\n<script setup lang=\"ts\">\nconst width = ref(0)\nonMounted(() => {\n  width.value = window.innerWidth\n})\n</script>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — SSR — Hydration Mismatch",
+          "url": "https://vuejs.org/guide/scaling-up/ssr.html#hydration-mismatch"
+        },
+        {
+          "title": "Nuxt — onMounted is client-only",
+          "url": "https://nuxt.com/docs/getting-started/data-fetching"
+        }
+      ]
+    },
+    {
+      "heading": "フックは setup の「同期」スコープでしか登録できない",
+      "body": "ライフサイクルフックは、現在のアクティブなコンポーネントインスタンスを内部で参照して登録されます。そのため `setup` の同期実行が終わってから（例: `await` の後や setTimeout 内、別ファイル経由の遅延呼び出し）登録しようとすると、どのインスタンスのフックか分からなくなり警告が出て登録されません。\n\n非同期データを待ちつつフックを登録したいときは、フック登録を `await` より前に書くのが鉄則です。",
+      "code": {
+        "lang": "ts",
+        "src": "<script setup lang=\"ts\">\nimport { onMounted } from 'vue'\n\n// ✅ await の前にフック登録\nonMounted(() => { /* ... */ })\n\nconst data = await fetchData()\n\n// ❌ await の後に書くと「インスタンス外」と判定されて登録されない\nonMounted(() => { /* これは無視される */ })\n</script>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Lifecycle Hooks — Registration Restriction",
+          "url": "https://vuejs.org/api/composition-api-lifecycle.html#onmounted"
+        }
+      ]
+    },
+    {
+      "heading": "Nuxt 固有の補助: ClientOnly / process.client / onMounted",
+      "body": "Nuxt では「サーバでは出さない、クライアントだけで描画」したい場面が頻繁にあります。\n\n- `<ClientOnly>`: 子要素をクライアントでだけレンダー。SSR との不一致回避や、ブラウザ専用ライブラリのラップに使う\n- `onMounted`: 上述の通り、クライアントでマウント完了後に走る。SSR とハイドレーションを安全に分離できる\n- `import.meta.client` / `import.meta.server`: Nuxt の SSR コンテキスト判定（旧 `process.client` / `process.server` は非推奨ではないが import.meta が推奨）\n\nクライアント専用の重いコンポーネント（地図、リッチエディタ等）は ClientOnly でラップしつつ、初期化処理は onMounted に閉じ込めるのが定石です。",
+      "code": {
+        "lang": "vue",
+        "src": "<template>\n  <ClientOnly>\n    <MapView />\n    <template #fallback>地図を読み込み中...</template>\n  </ClientOnly>\n</template>\n\n<script setup lang=\"ts\">\nif (import.meta.client) {\n  // クライアントのみ\n}\n</script>"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — <ClientOnly>",
+          "url": "https://nuxt.com/docs/api/components/client-only"
+        },
+        {
+          "title": "Nuxt — Rendering Modes",
+          "url": "https://nuxt.com/docs/guide/concepts/rendering"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "Nuxt のページコンポーネントで次のコードを書いた。サーバ側で起きることは？",
+      "code": {
+        "lang": "vue",
+        "src": "<script setup lang=\"ts\">\nimport { ref } from 'vue'\nconst w = ref(window.innerWidth)\n</script>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "サーバでも window が定義されているので問題なく動く",
+          "isCorrect": false,
+          "explanation": "Node.js 上での SSR には window が存在しない。window 参照はそのまま ReferenceError になる。"
+        },
+        {
+          "id": "b",
+          "label": "SSR 時に `ReferenceError: window is not defined` でクラッシュする",
+          "isCorrect": true,
+          "explanation": "正解。<script setup> の本体はサーバでも実行される。window や document を直接読みたければ onMounted や if (import.meta.client) で囲う。"
+        },
+        {
+          "id": "c",
+          "label": "Vue が自動でクライアントへ評価を遅延させるので影響なし",
+          "isCorrect": false,
+          "explanation": "Vue は setup 本体の評価を自動で遅延させない。クライアント限定処理は明示的に分離する必要がある。"
+        },
+        {
+          "id": "d",
+          "label": "ハイドレーションでクライアントの値に上書きされるのでエラーは出ない",
+          "isCorrect": false,
+          "explanation": "ハイドレーションはエラーをもみ消さない。サーバで例外が出れば 500 になる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — SSR — Writing SSR-friendly Code",
+          "url": "https://vuejs.org/guide/scaling-up/ssr.html#writing-ssr-friendly-code"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで onMounted は登録される？",
+      "code": {
+        "lang": "ts",
+        "src": "<script setup lang=\"ts\">\nimport { onMounted } from 'vue'\n\nconst data = await $fetch('/api/x')\nonMounted(() => console.log('mounted'))\n</script>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "登録され、マウント時に 'mounted' が出る",
+          "isCorrect": false,
+          "explanation": "await の後ではアクティブなコンポーネントインスタンスが取れないため登録されない（警告が出る）。"
+        },
+        {
+          "id": "b",
+          "label": "登録されず、警告 'onMounted is called when there is no active component instance' が出る",
+          "isCorrect": true,
+          "explanation": "正解。ライフサイクルフックは setup の同期スコープで登録する必要がある。await の前に書き直す。"
+        },
+        {
+          "id": "c",
+          "label": "実行時エラーになり、ページが表示されない",
+          "isCorrect": false,
+          "explanation": "致命的エラーではなく、警告ログとフック未登録に留まる。"
+        },
+        {
+          "id": "d",
+          "label": "await を解決してから登録されるので順序は問題ない",
+          "isCorrect": false,
+          "explanation": "現在のアクティブインスタンスは setup の同期実行が終わった時点で外れる。await の後の登録は無視される。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Async Setup — Lifecycle Hook Limitation",
+          "url": "https://vuejs.org/guide/built-ins/suspense.html#async-setup"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "ブラウザ専用のリッチテキストエディタ（DOM 直接操作）を Nuxt のページに組み込みたい。最も妥当な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "<ClientOnly> でラップし、初期化処理は子コンポーネントの onMounted に書く",
+          "isCorrect": true,
+          "explanation": "正解。SSR では描画せず、クライアントマウント後に初期化することで window / document 依存と SSR ミスマッチを同時に避けられる。"
+        },
+        {
+          "id": "b",
+          "label": "setup 本体でエディタを new し、onMounted で DOM にマウントする",
+          "isCorrect": false,
+          "explanation": "setup はサーバでも走る。new するクラスが window などに依存していれば SSR でクラッシュする。"
+        },
+        {
+          "id": "c",
+          "label": "サーバとクライアントで同じ HTML を出すために、onBeforeMount でエディタを生成する",
+          "isCorrect": false,
+          "explanation": "onBeforeMount もクライアント限定だが、DOM はまだ無いため target ノードを掴めず初期化に失敗する。"
+        },
+        {
+          "id": "d",
+          "label": "ssr: false をグローバルに設定して SPA モードにする",
+          "isCorrect": false,
+          "explanation": "アプリ全体の SSR を無効化するのは過剰。1 コンポーネントの都合で全体最適を崩すべきではない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — <ClientOnly>",
+          "url": "https://nuxt.com/docs/api/components/client-only"
+        },
+        {
+          "title": "Vue.js — onMounted",
+          "url": "https://vuejs.org/api/composition-api-lifecycle.html#onmounted"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "「クリックの度に状態を更新し、その都度ログを出したい」。最も妥当な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "onUpdated 内で console.log(count.value) する",
+          "isCorrect": false,
+          "explanation": "onUpdated は再レンダーのたびに走る汎用フックで、他の依存に反応してしまう恐れがある。さらに onUpdated 内で書き込みすると無限ループの危険がある。"
+        },
+        {
+          "id": "b",
+          "label": "watch(count, (n) => console.log(n)) を定義する",
+          "isCorrect": true,
+          "explanation": "正解。「特定のリアクティブ値の変化」に副作用を結びつける用途は watch が最適。依存と副作用の関係が明確になる。"
+        },
+        {
+          "id": "c",
+          "label": "@click ハンドラ内で直接 console.log する",
+          "isCorrect": false,
+          "explanation": "ハンドラに書くと「クリック以外のパスで値が変わった場合」のログ出力が抜ける。ロジックを依存ベースで宣言できる watch のほうが堅い。"
+        },
+        {
+          "id": "d",
+          "label": "computed(() => { console.log(count.value); return count.value })",
+          "isCorrect": false,
+          "explanation": "computed の getter で副作用を書くのはアンチパターン。キャッシュにより呼ばれ方が予測しづらい。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Watchers",
+          "url": "https://vuejs.org/guide/essentials/watchers.html"
+        },
+        {
+          "title": "Vue.js — onUpdated",
+          "url": "https://vuejs.org/api/composition-api-lifecycle.html#onupdated"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "onMounted などの DOM 系フックは SSR では呼ばれない。クライアント限定処理の置き場として使う",
+      "setup 本体はサーバ／クライアント両方で走る。window/document の直接参照は禁止",
+      "ライフサイクルフックは setup の同期スコープでのみ登録できる（await の前に書く）",
+      "ブラウザ専用ライブラリは <ClientOnly> + onMounted の組み合わせで安全に扱う"
+    ],
+    "furtherReading": [
+      {
+        "title": "Vue.js — Lifecycle Hooks",
+        "url": "https://vuejs.org/guide/essentials/lifecycle.html"
+      },
+      {
+        "title": "Vue.js — Server-Side Rendering",
+        "url": "https://vuejs.org/guide/scaling-up/ssr.html"
+      },
+      {
+        "title": "Nuxt — Rendering Modes",
+        "url": "https://nuxt.com/docs/guide/concepts/rendering"
+      }
+    ]
+  }
+}

@@ -1,0 +1,266 @@
+{
+  "id": "nuxt-data-fetching.ssr-csr-ssg",
+  "version": 1,
+  "title": "SSR / CSR / SSG レンダリングモードの読み分け",
+  "estimatedMinutes": 7,
+  "tags": ["nuxt", "ssr", "ssg"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "「いつ」HTML が出来るかが全部の起点",
+    "body": "Nuxt のレンダリングモードは「HTML がいつ生成されるか」で分類されます。SSR は **リクエストのたび**にサーバ側で、SSG（プリレンダー）は **ビルド時** に静的ファイルとして、CSR（SPA）は **ブラウザ到着後**に JavaScript で組み立てます。同じアプリでもページごとに使い分けられ、選択はパフォーマンス・SEO・データの鮮度・運用コストに直結します。"
+  },
+
+  "explanations": [
+    {
+      "heading": "3 モードの概観",
+      "body": "Nuxt の主な選択肢：\n\n- **SSR（Universal）**: リクエスト時にサーバで Vue を実行し HTML を生成。クライアントでハイドレートして SPA 化。SEO と初期表示に強く、データの鮮度も最新。サーバが必要。Nuxt の既定モード\n- **SSG（プリレンダリング）**: ビルド時に全ページを HTML 化して静的配信。最速の TTFB、サーバ不要、CDN との相性最高。ただしビルド時データで固定されるので、頻繁に変わる動的データには不向き\n- **CSR / SPA**: HTML はほぼ空、ブラウザで JS が走ってから描画。SEO が弱く初回 LCP も遅め。ログイン後アプリなど、SEO 不要で運用がシンプルな用途\n\nNuxt では `nuxt.config.ts` の `ssr` / `nitro.prerender` / `routeRules` で粒度を変えられます。",
+      "code": {
+        "lang": "ts",
+        "src": "// nuxt.config.ts\nexport default defineNuxtConfig({\n  ssr: true,                      // 既定: SSR\n  nitro: {\n    prerender: {\n      routes: ['/', '/about'],    // ビルド時に静的化\n    },\n  },\n  routeRules: {\n    '/admin/**': { ssr: false },  // /admin 配下は SPA\n    '/blog/**': { isr: 60 },      // ISR: 60 秒キャッシュ\n  },\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Rendering Modes",
+          "url": "https://nuxt.com/docs/guide/concepts/rendering"
+        },
+        {
+          "title": "Nuxt — Route Rules",
+          "url": "https://nuxt.com/docs/guide/concepts/rendering#hybrid-rendering"
+        }
+      ]
+    },
+    {
+      "heading": "ハイドレーション: サーバとクライアントの引き継ぎ",
+      "body": "SSR ページはサーバが返す HTML をブラウザが表示した直後に、Vue が JS で同じ仮想 DOM を再構築し、イベントハンドラやリアクティビティを「接続」します。これがハイドレーション。\n\nハイドレーション直前と直後で **HTML が一致していなければならない**のが鉄則です。サーバとクライアントで `Math.random()` や `new Date()`、`window`／`navigator` 経由の分岐などを使うと内容がズレ、`Hydration node mismatch` 警告 → 部分的に DOM が消える挙動になります。条件は `useFetch` の payload や `useState` で共有するのが定石です。",
+      "code": {
+        "lang": "vue",
+        "src": "<!-- ❌ サーバとクライアントで値がズレる -->\n<template>\n  <p>{{ Math.random() }}</p>\n</template>\n\n<!-- ✅ useState で共有して安定させる -->\n<script setup lang=\"ts\">\nconst seed = useState('seed', () => Math.random())\n</script>\n<template><p>{{ seed }}</p></template>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Hydration Mismatch",
+          "url": "https://vuejs.org/guide/scaling-up/ssr.html#hydration-mismatch"
+        },
+        {
+          "title": "Nuxt — useState",
+          "url": "https://nuxt.com/docs/api/composables/use-state"
+        }
+      ]
+    },
+    {
+      "heading": "ISR / SWR: 静的と動的の中間",
+      "body": "頻繁にデータは変わるが毎リクエスト DB を叩きたくない場合は、`routeRules` の **ISR（Incremental Static Regeneration）** や **SWR（stale-while-revalidate）** が選択肢になります。\n\n- `isr: 60`: 60 秒間は前回生成済みの静的 HTML を返し、その後に再生成する。ブログや商品一覧など『1 分前のデータでも問題ない』ページ向き\n- `swr: 60`: 60 秒以内なら古いキャッシュを即返し、裏で再生成。古いコンテンツが返るリスクと引き換えに常に高速\n- `prerender: true`: ビルド時に静的化（純粋な SSG）\n- `ssr: false`: SPA として配信\n\nVercel など対応ホストでのみ ISR / SWR が効きます（Nitro のホスト差異）。",
+      "code": {
+        "lang": "ts",
+        "src": "export default defineNuxtConfig({\n  routeRules: {\n    '/': { prerender: true },\n    '/blog/**': { isr: 60 },\n    '/news/**': { swr: 30 },\n    '/admin/**': { ssr: false },\n  },\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Hybrid Rendering",
+          "url": "https://nuxt.com/docs/guide/concepts/rendering#hybrid-rendering"
+        },
+        {
+          "title": "Nitro — Cache (SWR / ISR)",
+          "url": "https://nitro.build/guide/cache"
+        }
+      ]
+    },
+    {
+      "heading": "どう選ぶか: SEO / 鮮度 / 運用コスト",
+      "body": "判断の単純な道筋：\n\n1. **公開ページで SEO が必要**？ → SSR か SSG\n2. ページ内容が **ビルド時に確定**する？ → SSG（または ISR）が最速\n3. データが **常に最新**である必要があるが、毎リクエスト計算は重い？ → SWR\n4. ログイン後 / 管理画面 / SEO 不要 → SPA（`ssr: false`）\n5. 上記が混在 → ページごとに `routeRules` で混ぜる\n\nMVP 段階では「とりあえず SSR、トップだけ prerender、管理画面は SPA」あたりが運用しやすい構成です。",
+      "code": {
+        "lang": "ts",
+        "src": "// MVP 段階の典型構成\nexport default defineNuxtConfig({\n  ssr: true,\n  routeRules: {\n    '/': { prerender: true },\n    '/about': { prerender: true },\n    '/dashboard/**': { ssr: false },\n  },\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Deployment Presets",
+          "url": "https://nuxt.com/deploy"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードを SSR ページに書いた。本番でどのような挙動になる？",
+      "code": {
+        "lang": "vue",
+        "src": "<template>\n  <p>{{ new Date().toLocaleString() }}</p>\n</template>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "サーバで生成した日時がそのまま表示され続ける",
+          "isCorrect": false,
+          "explanation": "ハイドレーション時にクライアントが再評価して値が一致しなくなる。"
+        },
+        {
+          "id": "b",
+          "label": "サーバ生成時刻とクライアント実行時刻が異なるため、Hydration node mismatch の警告が出る",
+          "isCorrect": true,
+          "explanation": "正解。new Date() はサーバとクライアントで結果がほぼ確実に異なる。SSR では useState などで値を固定するか、ClientOnly で囲う必要がある。"
+        },
+        {
+          "id": "c",
+          "label": "Nuxt が自動で時刻を凍結するため警告は出ない",
+          "isCorrect": false,
+          "explanation": "Nuxt は時刻を凍結する仕組みを持たない。"
+        },
+        {
+          "id": "d",
+          "label": "SSR では new Date() が undefined を返すのでエラーになる",
+          "isCorrect": false,
+          "explanation": "Node にも Date はある。undefined にはならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Hydration Mismatch",
+          "url": "https://vuejs.org/guide/scaling-up/ssr.html#hydration-mismatch"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の routeRules の挙動として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "routeRules: {\n  '/blog/**': { isr: 60 },\n}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "毎リクエストで HTML を再生成し、60 秒だけ CDN にキャッシュ",
+          "isCorrect": false,
+          "explanation": "毎リクエスト生成は SSR の挙動。ISR は再生成タイミングが制御される。"
+        },
+        {
+          "id": "b",
+          "label": "60 秒間は同じ静的 HTML を返し、期限切れ後に背後で再生成する",
+          "isCorrect": true,
+          "explanation": "正解。ISR（Incremental Static Regeneration）は静的ファイルを期限付きでキャッシュし、期限後に再生成する仕組み。ホスト（Vercel など）の対応が必要。"
+        },
+        {
+          "id": "c",
+          "label": "ビルド時に全 /blog ページを静的化する",
+          "isCorrect": false,
+          "explanation": "それは prerender: true の挙動。ISR はビルド時静的化ではない。"
+        },
+        {
+          "id": "d",
+          "label": "SPA としてクライアント描画する",
+          "isCorrect": false,
+          "explanation": "それは ssr: false の挙動。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Hybrid Rendering",
+          "url": "https://nuxt.com/docs/guide/concepts/rendering#hybrid-rendering"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "頻繁に更新される商品ページ（SEO 必須、平均アクセスは多いが在庫情報は 1 分前で許容）。最も適切なルール設定は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "routeRules: { '/products/**': { isr: 60 } }",
+          "isCorrect": true,
+          "explanation": "正解。1 分間 CDN キャッシュ + バックグラウンド再生成で SEO・速度・鮮度のバランスが良い。ログイン状態に依らない公開ページに最適。"
+        },
+        {
+          "id": "b",
+          "label": "routeRules: { '/products/**': { ssr: false } }",
+          "isCorrect": false,
+          "explanation": "SPA 化すると検索エンジンが内容を読みにくく、SEO 要件と相反する。"
+        },
+        {
+          "id": "c",
+          "label": "routeRules: { '/products/**': { prerender: true } }",
+          "isCorrect": false,
+          "explanation": "ビルド時静的化は最速だがビルド時のデータで固定される。1 分鮮度の要件には合わない。"
+        },
+        {
+          "id": "d",
+          "label": "全ページ SSR のまま、Cache-Control ヘッダだけブラウザに任せる",
+          "isCorrect": false,
+          "explanation": "オリジン負荷を下げにくく、CDN 共有キャッシュの恩恵も限定的。ISR の方が運用効率が良い。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Hybrid Rendering",
+          "url": "https://nuxt.com/docs/guide/concepts/rendering#hybrid-rendering"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "ログイン後のダッシュボードページ（SEO 不要、個人化されたデータのみ）。最も適切な設定は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "routeRules で ssr: false にする（または definePageMeta で同等）",
+          "isCorrect": true,
+          "explanation": "正解。SEO 不要かつ個人データなので SSR コストをかける意味が薄い。SPA でログイン後にクライアントから取得する設計が運用上シンプル。"
+        },
+        {
+          "id": "b",
+          "label": "isr: 5 で 5 秒だけキャッシュする",
+          "isCorrect": false,
+          "explanation": "個人化データを共有キャッシュに乗せると別ユーザーに漏れる致命的バグになる。ISR / SWR は公開ページ専用。"
+        },
+        {
+          "id": "c",
+          "label": "prerender: true でビルド時静的化",
+          "isCorrect": false,
+          "explanation": "個人化データはビルド時に存在しない。prerender できない。"
+        },
+        {
+          "id": "d",
+          "label": "既定の SSR のまま、サーバから Cookie を読みつつ毎回 fetch する",
+          "isCorrect": false,
+          "explanation": "可能だが SSR 中の認証フロー・Cookie 転送など実装が増える。SEO 不要なら SPA 化したほうが素直。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Rendering Modes",
+          "url": "https://nuxt.com/docs/guide/concepts/rendering"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "SSR / SSG / SPA は『HTML がいつ作られるか』の違い。SEO・鮮度・運用コストで選ぶ",
+      "ハイドレーション中は HTML がサーバ／クライアントで一致している必要がある（Date / random / window 直参照は避ける）",
+      "ISR と SWR は公開ページ専用の最適化。個人化データには使ってはいけない",
+      "Nuxt は routeRules でページ単位に混在させられる"
+    ],
+    "furtherReading": [
+      {
+        "title": "Nuxt — Rendering Modes",
+        "url": "https://nuxt.com/docs/guide/concepts/rendering"
+      },
+      {
+        "title": "Vue.js — Server-Side Rendering",
+        "url": "https://vuejs.org/guide/scaling-up/ssr.html"
+      },
+      {
+        "title": "Nitro — Cache",
+        "url": "https://nitro.build/guide/cache"
+      }
+    ]
+  }
+}

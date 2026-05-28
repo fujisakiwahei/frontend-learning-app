@@ -1,0 +1,254 @@
+{
+  "id": "modern-js.optional-chaining",
+  "version": 1,
+  "title": "オプショナルチェイニングと nullish coalescing",
+  "estimatedMinutes": 5,
+  "tags": ["javascript", "optional-chaining", "nullish-coalescing"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "?. と ?? を、似た書き味の落とし穴と一緒に押さえる",
+    "body": "`?.` はオブジェクト・関数・配列アクセスで『途中が null / undefined ならそこで止めて undefined を返す』演算子。`??` は『左辺が null / undefined のときだけ右辺を返す』演算子です。`||` との違い（falsy 全般 vs nullish のみ）を取り違えると、'0' や '' が右辺に置き換わってしまうバグになります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "?. の 3 つの形",
+      "body": "オプショナルチェイニング `?.` は 3 つの形があります：\n\n- プロパティアクセス: `obj?.prop`\n- 配列アクセス: `arr?.[0]`\n- 関数呼び出し: `fn?.()`\n\nいずれも左辺が null / undefined のときに **短絡して** undefined を返します。途中までは評価され、短絡したそれ以降は評価されません。",
+      "code": {
+        "lang": "ts",
+        "src": "const user: User | null = await load()\nuser?.name           // undefined or string\nusers?.[0]?.email    // 配列が空でも undefined\nonClick?.(event)     // onClick が無ければ呼ばない"
+      },
+      "sources": [
+        {
+          "title": "MDN — Optional chaining (?.)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Optional_chaining"
+        }
+      ]
+    },
+    {
+      "heading": "?? と || の違い",
+      "body": "両方とも『左辺が空なら右辺』ですが、判定基準が違います：\n\n- `||`: **falsy（0, '', false, NaN, null, undefined 等）** なら右辺\n- `??`: **null か undefined のときだけ** 右辺\n\n例えば `count || 10` は count が 0 でも 10 に置き換わってしまいます。デフォルト値が欲しいだけなら `??` が安全な初期値の表現です。",
+      "code": {
+        "lang": "ts",
+        "src": "const a = 0 || 10        // 10（0 は falsy なので右へ）\nconst b = 0 ?? 10        // 0（0 は nullish ではない）\n\nconst name = input ?? 'guest'  // null/undefined のときだけ 'guest'"
+      },
+      "sources": [
+        {
+          "title": "MDN — Nullish coalescing operator (??)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing"
+        }
+      ]
+    },
+    {
+      "heading": "?? と && / || を混ぜると構文エラー",
+      "body": "`??` を `&&` や `||` と **括弧なしで混ぜる** と構文エラーになります。優先順位の混乱を防ぐための仕様です。`a ?? b || c` は許されず、`(a ?? b) || c` または `a ?? (b || c)` のように明示します。\n\nリアルなコードでは `a ?? b ?? c` のように同じ演算子を連ねるか、複雑な式を一度ローカル変数に置く方が読みやすいです。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ SyntaxError\n// const v = a ?? b || c\n\n// ✅ 明示的に\nconst v = (a ?? b) || c\nconst w = a ?? (b || c)"
+      },
+      "sources": [
+        {
+          "title": "MDN — Nullish coalescing — Restrictions",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing"
+        }
+      ]
+    },
+    {
+      "heading": "??= / ||= / &&= 代入演算子",
+      "body": "代入版もあり、頻出パターンを短く書けます：\n\n- `a ??= b`: a が nullish のときだけ a に b を代入（既定値の初期化）\n- `a ||= b`: a が falsy のときだけ b を代入\n- `a &&= b`: a が truthy のときだけ b を代入\n\n設定オブジェクトの初期化や、空のフィールドだけ補完する用途に向きます。",
+      "code": {
+        "lang": "ts",
+        "src": "const cfg: { theme?: string; debug?: boolean } = {}\ncfg.theme ??= 'light'  // 未設定なら 'light' を入れる\ncfg.debug ??= false    // false は nullish ではないので、すでに false ならそのまま"
+      },
+      "sources": [
+        {
+          "title": "MDN — Logical nullish assignment (??=)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Logical_nullish_assignment"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードの v の値は？",
+      "code": {
+        "lang": "ts",
+        "src": "const count = 0\nconst v = count || 10"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "0",
+          "isCorrect": false,
+          "explanation": "0 は falsy なので || は右辺を返す。"
+        },
+        {
+          "id": "b",
+          "label": "10",
+          "isCorrect": true,
+          "explanation": "正解。0 は falsy なので || は 10 を返す。意図しない置き換えになるなら ?? を使う。"
+        },
+        {
+          "id": "c",
+          "label": "null",
+          "isCorrect": false,
+          "explanation": "null になる経路はない。"
+        },
+        {
+          "id": "d",
+          "label": "undefined",
+          "isCorrect": false,
+          "explanation": "undefined にもならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Logical OR (||)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Logical_OR"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードの v の値は？",
+      "code": {
+        "lang": "ts",
+        "src": "const count = 0\nconst v = count ?? 10"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "0",
+          "isCorrect": true,
+          "explanation": "正解。?? は null/undefined のときだけ右辺を返す。0 はそのままなので v は 0。"
+        },
+        {
+          "id": "b",
+          "label": "10",
+          "isCorrect": false,
+          "explanation": "それは || の挙動。"
+        },
+        {
+          "id": "c",
+          "label": "null",
+          "isCorrect": false,
+          "explanation": "null にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "TypeError",
+          "isCorrect": false,
+          "explanation": "エラーは出ない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Nullish coalescing (??)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "ページサイズの設定 page.size に既定値 20 を入れたい。空文字や 0 は『明示的に指定された値』として尊重したい。最も適切なコードは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "const size = page.size ?? 20",
+          "isCorrect": true,
+          "explanation": "正解。?? は null/undefined のときのみ右辺。0 や '' といった『意図的に指定された falsy 値』を尊重できる。"
+        },
+        {
+          "id": "b",
+          "label": "const size = page.size || 20",
+          "isCorrect": false,
+          "explanation": "0 のときも 20 に置き換わる。意図と合わない。"
+        },
+        {
+          "id": "c",
+          "label": "const size = page.size === undefined ? 20 : page.size",
+          "isCorrect": false,
+          "explanation": "動くが、null は無視されるので意味が変わる。?? を使えばどちらもまとめて拾える。"
+        },
+        {
+          "id": "d",
+          "label": "const size = !page.size ? 20 : page.size",
+          "isCorrect": false,
+          "explanation": "0 や '' も falsy 扱い。falsy 全般を既定値に置き換えるバグになる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Nullish coalescing operator",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードは何を出力する？（onClose が undefined の状況）",
+      "code": {
+        "lang": "ts",
+        "src": "const result = onClose?.()\nconsole.log(result)"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "TypeError: onClose is not a function",
+          "isCorrect": false,
+          "explanation": "?.() は左辺が null/undefined なら呼ばずに undefined を返す。"
+        },
+        {
+          "id": "b",
+          "label": "undefined",
+          "isCorrect": true,
+          "explanation": "正解。onClose が undefined なので呼び出しは短絡され、result は undefined。"
+        },
+        {
+          "id": "c",
+          "label": "null",
+          "isCorrect": false,
+          "explanation": "短絡時は null ではなく undefined を返す。"
+        },
+        {
+          "id": "d",
+          "label": "0",
+          "isCorrect": false,
+          "explanation": "数値にはならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Optional chaining — Optional function calls",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Optional_chaining"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "?. はプロパティ・配列・関数呼び出しの 3 形態で『途中が nullish なら undefined』を表す",
+      "?? は null/undefined のときだけ右辺。0 や '' のような意図的な falsy 値を尊重する初期値表現",
+      "?? と || / && の混在は括弧なしでは構文エラー。明示する",
+      "??= / ||= / &&= は『空のときだけ代入』の短縮形"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Optional chaining (?.)",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Optional_chaining"
+      },
+      {
+        "title": "MDN — Nullish coalescing (??)",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing"
+      }
+    ]
+  }
+}

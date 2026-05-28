@@ -1,0 +1,266 @@
+{
+  "id": "typescript-type-reading.utility-types",
+  "version": 1,
+  "title": "ユーティリティ型（Partial / Pick / Omit / Record）",
+  "estimatedMinutes": 6,
+  "tags": ["typescript", "utility-types"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "既存の型から型を作る",
+    "body": "TypeScript には標準で『型を加工する型』が用意されています。`Partial<T>` で全フィールドをオプショナルに、`Required<T>` で必須に、`Pick<T, K>` でキーを抜き出し、`Omit<T, K>` でキーを除外、`Record<K, V>` でキーと値の型を組んだ辞書型を作る、など。フォームの編集中状態、ストアのアクション引数、API の差分更新など実務で頻出します。"
+  },
+
+  "explanations": [
+    {
+      "heading": "Partial / Required / Readonly",
+      "body": "- `Partial<T>`: T の全フィールドを `?`（省略可）に変える。フォーム編集中の途中状態や差分更新ペイロードの型でよく使う\n- `Required<T>`: T の全フィールドを必須にする（オプショナルを潰す）\n- `Readonly<T>`: T の全フィールドを readonly にする（変更不可）\n\nこれらは『すべて』を一括で変えるので、特定フィールドだけ変えたい場合は Pick / Omit との組み合わせや、mapped types で書きます。",
+      "code": {
+        "lang": "ts",
+        "src": "interface User { id: string; name: string; email?: string }\n\ntype UserPatch = Partial<User>            // { id?: string; name?: string; email?: string }\ntype FullUser = Required<User>            // { id: string; name: string; email: string }\ntype FrozenUser = Readonly<User>          // 全プロパティが readonly\n\nfunction updateUser(id: string, patch: Partial<User>) { /* ... */ }"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Utility Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html"
+        }
+      ]
+    },
+    {
+      "heading": "Pick / Omit",
+      "body": "- `Pick<T, K>`: T からキー K だけを抜き出した型\n- `Omit<T, K>`: T からキー K を除いた型\n\nどちらも『大きな型から必要なフィールドだけ』『公開したくないフィールドを隠す』ときに使います。API のリクエストとレスポンスで型の一部だけ共有したい場合、`Omit<User, 'password' | 'createdAt'>` のように書くと公開用のサブタイプが作れます。\n\nキー指定はユニオン型で複数指定できます。`Pick<User, 'id' | 'name'>` のように書きます。",
+      "code": {
+        "lang": "ts",
+        "src": "interface User {\n  id: string\n  name: string\n  email: string\n  password: string\n}\n\ntype PublicUser = Omit<User, 'password'>             // password を除く\ntype LoginInput = Pick<User, 'email' | 'password'>   // 2 つだけ"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Pick<Type, Keys>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#picktype-keys"
+        },
+        {
+          "title": "TypeScript — Omit<Type, Keys>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#omittype-keys"
+        }
+      ]
+    },
+    {
+      "heading": "Record / ReturnType / Awaited",
+      "body": "- `Record<K, V>`: キー K と値 V を持つ辞書型を作る。`Record<'a'|'b', number>` は `{ a: number; b: number }`\n- `ReturnType<F>`: 関数型 F の戻り値の型を取り出す\n- `Awaited<T>`: Promise の値型を取り出す（Promise<Promise<X>> も再帰的に剥がす）\n\n`ReturnType<typeof someFunc>` は Pinia の getter 型や util 関数のレスポンス型を再利用するときに頻出します。`Awaited<ReturnType<typeof asyncFn>>` で『その async 関数が解決する値の型』を再利用できます。",
+      "code": {
+        "lang": "ts",
+        "src": "type Status = 'todo' | 'doing' | 'done'\ntype Counts = Record<Status, number>  // { todo: number; doing: number; done: number }\n\nasync function loadUser() {\n  return { id: '1', name: 'Alice' }\n}\ntype LoadedUser = Awaited<ReturnType<typeof loadUser>>\n// { id: string; name: string }"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Record<Keys, Type>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#recordkeys-type"
+        },
+        {
+          "title": "TypeScript — ReturnType<Type>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#returntypetype"
+        },
+        {
+          "title": "TypeScript — Awaited<Type>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#awaitedtype"
+        }
+      ]
+    },
+    {
+      "heading": "組み合わせて読む練習",
+      "body": "ユーティリティ型はネストして使われることが多く、読むときは内側から評価していくのが基本です。たとえば `Partial<Omit<User, 'id'>>` は『User から id を除去 → 残りを全部オプショナル化』の二段階。\n\nまた `keyof T` と組み合わせる例も多い。`type Patch<T> = Partial<Pick<T, keyof T>>` のような書き方は『T の任意のキーの一部を上書き』する形を表現します。これに条件型を足せばさらに高度な変換も書けますが、まずは ① 内側から評価、② keyof は『キーのユニオン』を取り出す、を押さえると読み解けるようになります。",
+      "code": {
+        "lang": "ts",
+        "src": "interface User { id: string; name: string; email?: string }\n\ntype EditableUser = Partial<Omit<User, 'id'>>\n// { name?: string; email?: string }\n\ntype OnlyName = Pick<User, 'name'>  // { name: string }"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Mapped Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/mapped-types.html"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `T` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "interface User { id: string; name: string; email: string }\ntype T = Omit<User, 'email' | 'id'>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "{ name: string }",
+          "isCorrect": true,
+          "explanation": "正解。Omit は指定キーを除去する。残るのは name のみ。"
+        },
+        {
+          "id": "b",
+          "label": "{ name?: string }",
+          "isCorrect": false,
+          "explanation": "Omit はオプショナル化しない。Partial の役目。"
+        },
+        {
+          "id": "c",
+          "label": "{ id: string; email: string }",
+          "isCorrect": false,
+          "explanation": "Pick の挙動。Omit は逆方向。"
+        },
+        {
+          "id": "d",
+          "label": "User そのまま",
+          "isCorrect": false,
+          "explanation": "指定キーが除去される。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Omit<Type, Keys>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#omittype-keys"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `R` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "async function load() {\n  return { id: '1', tags: ['a', 'b'] }\n}\ntype R = Awaited<ReturnType<typeof load>>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "Promise<{ id: string; tags: string[] }>",
+          "isCorrect": false,
+          "explanation": "Awaited で Promise の中身が取り出される。"
+        },
+        {
+          "id": "b",
+          "label": "{ id: string; tags: string[] }",
+          "isCorrect": true,
+          "explanation": "正解。ReturnType で関数戻り値（Promise）を取り、Awaited で中身を剥がす。"
+        },
+        {
+          "id": "c",
+          "label": "any",
+          "isCorrect": false,
+          "explanation": "型情報は十分にある。any にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "{ id: '1'; tags: ['a','b'] }",
+          "isCorrect": false,
+          "explanation": "as const なしの戻り値型はリテラル型にならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Awaited<Type>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#awaitedtype"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "ユーザー編集フォームの差分更新 API の引数型を作りたい。User { id, name, email } のうち id は変更不可、その他は任意で上書き可能。最も適切な型は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "{ id: string } & Partial<Omit<User, 'id'>>",
+          "isCorrect": true,
+          "explanation": "正解。id は必須、その他は任意。Omit で id を抜き、Partial で残りをオプショナル化。"
+        },
+        {
+          "id": "b",
+          "label": "Partial<User>",
+          "isCorrect": false,
+          "explanation": "id もオプショナルになるため、どのユーザーを更新するか不明になる。"
+        },
+        {
+          "id": "c",
+          "label": "Omit<User, 'id'>",
+          "isCorrect": false,
+          "explanation": "id が消えるうえ、残りも全部必須になる。差分更新の意図と合わない。"
+        },
+        {
+          "id": "d",
+          "label": "Required<Pick<User, 'id'>>",
+          "isCorrect": false,
+          "explanation": "id しか持たない型になり、編集対象フィールドが渡せない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Partial / Pick / Omit",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `M` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "type Status = 'todo' | 'doing' | 'done'\ntype M = Record<Status, number>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "{ status: number }",
+          "isCorrect": false,
+          "explanation": "Record はキー名がそのままプロパティ名になる。'status' という固定名にはならない。"
+        },
+        {
+          "id": "b",
+          "label": "{ todo: number; doing: number; done: number }",
+          "isCorrect": true,
+          "explanation": "正解。Record<K, V> はユニオン K の各キーに値型 V を割り当てる。"
+        },
+        {
+          "id": "c",
+          "label": "[number, number, number]",
+          "isCorrect": false,
+          "explanation": "Record はタプルを作らない。"
+        },
+        {
+          "id": "d",
+          "label": "number",
+          "isCorrect": false,
+          "explanation": "プロパティを持つオブジェクト型になる。プリミティブには潰れない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Record<Keys, Type>",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html#recordkeys-type"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "Partial / Required / Readonly は『全フィールド一括変換』",
+      "Pick / Omit は『キー指定で抜き出す／取り除く』",
+      "Record<K,V> は『キーと値の辞書型』を生成する",
+      "ReturnType / Awaited で『関数戻り値』『Promise の中身』を取り出して再利用できる"
+    ],
+    "furtherReading": [
+      {
+        "title": "TypeScript — Utility Types (Handbook)",
+        "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html"
+      },
+      {
+        "title": "TypeScript — Mapped Types",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/mapped-types.html"
+      }
+    ]
+  }
+}

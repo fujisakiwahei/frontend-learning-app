@@ -1,0 +1,307 @@
+{
+  "id": "vue-reactivity.computed-vs-watch",
+  "version": 1,
+  "title": "computed と watch / watchEffect の使い分け",
+  "estimatedMinutes": 7,
+  "tags": ["vue3", "reactivity", "computed", "watch"],
+  "prerequisites": ["vue-reactivity.ref-vs-reactive"],
+
+  "intro": {
+    "headline": "「派生値」か「副作用」かで選ぶ",
+    "body": "computed は他のリアクティブな値から派生する値を宣言するための API、watch / watchEffect は依存が変わったときに副作用（DOM 操作・API 呼び出し・ログ出力など）を走らせるための API です。「値が欲しい」なら computed、「何かをしたい」なら watch というのが選択の最短ルールです。役割を取り違えると、無限ループ・不要な再計算・トラッキング漏れといった事故につながります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "computed は派生値・キャッシュあり・読み取り専用が原則",
+      "body": "`computed()` は getter を渡して派生値を作ります。返り値は ref に似た `ComputedRef` で、`.value` 経由で読みます。依存している ref / reactive のプロパティが変わるまで結果はキャッシュされ、同じ計算は何度参照しても 1 回しか走りません。\n\n書き込み可能にしたいときは `get` と `set` を持つオブジェクトを渡します（書き込み可能 computed）。ただし基本は読み取り専用で、書き込みが必要なら ref を素直に使うほうが読みやすくなります。",
+      "code": {
+        "lang": "ts",
+        "src": "import { ref, computed } from 'vue'\n\nconst price = ref(100)\nconst qty = ref(2)\nconst total = computed(() => price.value * qty.value)\n\nconsole.log(total.value) // 200\nprice.value = 150\nconsole.log(total.value) // 300（依存が変わったので再計算）\n\n// 書き込み可能 computed\nconst fullName = computed({\n  get: () => `${first.value} ${last.value}`,\n  set: (v: string) => {\n    [first.value, last.value] = v.split(' ')\n  },\n})"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Computed Properties",
+          "url": "https://vuejs.org/guide/essentials/computed.html"
+        },
+        {
+          "title": "Vue.js — computed()",
+          "url": "https://vuejs.org/api/reactivity-core.html#computed"
+        }
+      ]
+    },
+    {
+      "heading": "watch は「特定の依存を明示」、watchEffect は「使った依存を自動追跡」",
+      "body": "`watch(source, cb)` は監視対象を明示的に渡し、変化があったら新旧の値を受け取ってコールバックを実行します。`watchEffect(cb)` はコールバックを即時実行し、その中で読まれたリアクティブな値を依存として自動収集します。\n\n`watch` は新旧の値が必要なとき・副作用を遅延実行したいとき・依存を絞り込みたいときに、`watchEffect` は副作用を初期化と同時にも走らせたいとき・依存を列挙したくないときに向きます。どちらも `<script setup>` 内で呼べばコンポーネントの unmount で自動停止します。",
+      "code": {
+        "lang": "ts",
+        "src": "import { ref, watch, watchEffect } from 'vue'\n\nconst id = ref(1)\n\n// watch: id が変わった瞬間だけ走る。初期実行はしない（immediate: true で出来る）\nwatch(id, async (newId, oldId) => {\n  console.log(`changed: ${oldId} -> ${newId}`)\n  await fetchUser(newId)\n})\n\n// watchEffect: 即時実行 + cb 内で読んだ ref を自動追跡\nwatchEffect(async () => {\n  await fetchUser(id.value) // id.value を読んだので id の変化に反応する\n})"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Watchers",
+          "url": "https://vuejs.org/guide/essentials/watchers.html"
+        },
+        {
+          "title": "Vue.js — watch()",
+          "url": "https://vuejs.org/api/reactivity-core.html#watch"
+        },
+        {
+          "title": "Vue.js — watchEffect()",
+          "url": "https://vuejs.org/api/reactivity-core.html#watcheffect"
+        }
+      ]
+    },
+    {
+      "heading": "computed の getter で副作用を書かない",
+      "body": "computed の getter は「純粋関数」として書くのが原則です。getter 内で fetch を投げたり console.log を出したり、別の ref に書き込んだりするとキャッシュの仕組みと相性が悪く、依存追跡の境界もぼやけます。副作用は watch / watchEffect 側に寄せ、computed は「入力 → 出力」の写像にとどめます。\n\nまた、getter 内で同じ computed 自身の値に依存して書き込むと無限ループになります。連動した書き込みが必要な場面では、書き込み可能 computed の `set` で明示的に処理を分離します。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ computed の中で副作用\nconst result = computed(() => {\n  fetch('/api/log', { method: 'POST' }) // 副作用！\n  return query.value.trim()\n})\n\n// ✅ 副作用は watchEffect で分離\nconst trimmed = computed(() => query.value.trim())\nwatchEffect(() => {\n  fetch('/api/log', { method: 'POST', body: trimmed.value })\n})"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Computed Properties — Best Practices",
+          "url": "https://vuejs.org/guide/essentials/computed.html#best-practices"
+        }
+      ]
+    },
+    {
+      "heading": "watch の deep / flush / immediate オプション",
+      "body": "`watch` の第三引数で挙動を細かく調整できます。\n\n- `immediate: true`: 登録時に 1 回コールバックを実行する（初期化と同じロジックで初回も走らせたい場合）\n- `deep: true`: オブジェクトの内部プロパティ変化も検知する。reactive オブジェクトを直接渡した場合は自動で deep になる\n- `flush: 'post'`: DOM 更新後に実行する。DOM を読みたい watch ではこれを使う（既定は `'pre'`）\n\n`watchEffect` も `flush` を取れます。これらは「使うべき場面で初めて指定する」もので、初期値はそのままで多くのケースに足ります。",
+      "code": {
+        "lang": "ts",
+        "src": "watch(\n  () => state.user,\n  (next, prev) => { /* ... */ },\n  { immediate: true, deep: true, flush: 'post' }\n)"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Watchers — Eager Watchers / Deep Watchers / Callback Flush Timing",
+          "url": "https://vuejs.org/guide/essentials/watchers.html#eager-watchers"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の console.log の出力回数として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "import { ref, computed } from 'vue'\n\nconst a = ref(1)\nconst double = computed(() => {\n  console.log('calc')\n  return a.value * 2\n})\n\nconsole.log(double.value)\nconsole.log(double.value)\nconsole.log(double.value)"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "calc は 3 回出力される",
+          "isCorrect": false,
+          "explanation": "computed はキャッシュされる。依存（a.value）が変わっていないので getter は 1 回しか走らない。"
+        },
+        {
+          "id": "b",
+          "label": "calc は 1 回だけ出力される",
+          "isCorrect": true,
+          "explanation": "正解。computed は依存が変わるまで結果をキャッシュする。同じ値を 3 回読んでも getter は最初の 1 回だけ実行される。"
+        },
+        {
+          "id": "c",
+          "label": "calc は 0 回（getter は読まれるまで走らない）",
+          "isCorrect": false,
+          "explanation": "computed は遅延評価だが、最初の `double.value` で getter が呼ばれる。0 回ではない。"
+        },
+        {
+          "id": "d",
+          "label": "依存追跡が壊れて実行時エラーになる",
+          "isCorrect": false,
+          "explanation": "console.log は副作用だが、依存追跡を壊すものではなくエラーにもならない。ただし getter で副作用を書くのはアンチパターン。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Computed Caching vs Methods",
+          "url": "https://vuejs.org/guide/essentials/computed.html#computed-caching-vs-methods"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで cb が実行される回数は？（id.value は順に 1 → 2 → 2 → 3 と変化する）",
+      "code": {
+        "lang": "ts",
+        "src": "import { ref, watch } from 'vue'\n\nconst id = ref(1)\nconst cb = (next: number, prev: number) => console.log(next, prev)\nwatch(id, cb)\n\nid.value = 2\nid.value = 2\nid.value = 3"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "3 回（変更のたびに常に走る）",
+          "isCorrect": false,
+          "explanation": "同じ値への代入では値の差分がないため watch のコールバックは走らない。"
+        },
+        {
+          "id": "b",
+          "label": "2 回（1→2 と 2→3）",
+          "isCorrect": true,
+          "explanation": "正解。watch は前回の値と異なるときだけ呼ばれる。2 回目の `id.value = 2` は値が変わらないのでスキップされる。"
+        },
+        {
+          "id": "c",
+          "label": "4 回（初回 + 3 回の代入）",
+          "isCorrect": false,
+          "explanation": "watch は immediate: true を指定しない限り初回は走らない。"
+        },
+        {
+          "id": "d",
+          "label": "0 回（ソースが ref なので watchEffect でないと反応しない）",
+          "isCorrect": false,
+          "explanation": "watch は ref をそのまま渡しても監視できる（内部で .value を読み取る）。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Watch Source Types",
+          "url": "https://vuejs.org/guide/essentials/watchers.html#watch-source-types"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "「カート内商品の合計金額」を表示する。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "const total = computed(() => items.value.reduce((s, i) => s + i.price * i.qty, 0))",
+          "isCorrect": true,
+          "explanation": "正解。他のリアクティブ値から導く「派生値」は computed の典型用途。キャッシュも効き、テンプレートで {{ total }} と書けば自動で再描画される。"
+        },
+        {
+          "id": "b",
+          "label": "const total = ref(0); watch(items, () => { total.value = items.value.reduce(...) })",
+          "isCorrect": false,
+          "explanation": "動作はするが、computed で 1 行で済む処理を watch + ref で書いており冗長。初回計算のために immediate: true も必要になる。"
+        },
+        {
+          "id": "c",
+          "label": "function total() { return items.value.reduce(...) } をテンプレで {{ total() }} と呼ぶ",
+          "isCorrect": false,
+          "explanation": "毎回再計算され、キャッシュが効かない。再描画のたびに走るためコストが上がる。"
+        },
+        {
+          "id": "d",
+          "label": "let total = items.value.reduce(...) として宣言時に計算",
+          "isCorrect": false,
+          "explanation": "宣言時の 1 回しか計算されない。items が変わってもテンプレに反映されない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Computed Properties — Basic Example",
+          "url": "https://vuejs.org/guide/essentials/computed.html#basic-example"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "「検索クエリが変わったら API を呼ぶ。ただし最初のレンダー時にも 1 回呼びたい」。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "watchEffect(() => fetchResults(query.value))",
+          "isCorrect": true,
+          "explanation": "正解。watchEffect は登録時に即時 1 回実行され、コールバック内で読んだ query.value を依存として追跡する。「初回 + 変更時」の典型パターンに最短で合う。"
+        },
+        {
+          "id": "b",
+          "label": "watch(query, () => fetchResults(query.value))",
+          "isCorrect": false,
+          "explanation": "watch は既定で初回は走らない。immediate: true を付ければ動くが、それなら watchEffect のほうが依存を明示せずに済む。"
+        },
+        {
+          "id": "c",
+          "label": "computed(() => fetchResults(query.value))",
+          "isCorrect": false,
+          "explanation": "computed は派生値用。getter で fetch を投げるのはアンチパターンで、値を読むまで実行されないキャッシュの挙動とも噛み合わない。"
+        },
+        {
+          "id": "d",
+          "label": "onMounted(() => fetchResults(query.value)) だけ書く",
+          "isCorrect": false,
+          "explanation": "初回は走るが、その後 query が変わっても再実行されない。「変更時にも呼びたい」要件を満たさない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — watchEffect()",
+          "url": "https://vuejs.org/api/reactivity-core.html#watcheffect"
+        },
+        {
+          "title": "Vue.js — Eager Watchers (immediate)",
+          "url": "https://vuejs.org/guide/essentials/watchers.html#eager-watchers"
+        }
+      ]
+    },
+    {
+      "id": "ex5",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで `el` の値を console.log した結果として正しいのは？（template に <div ref=\"el\">A</div> が存在する）",
+      "code": {
+        "lang": "ts",
+        "src": "import { ref, watch } from 'vue'\n\nconst el = ref<HTMLElement | null>(null)\nconst text = ref('init')\n\nwatch(text, () => {\n  console.log(el.value?.textContent)\n}, { flush: 'pre' })\n\n// この時点で text.value = 'next' に書き換える"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "'next'（DOM 更新後の最新テキストが取れる）",
+          "isCorrect": false,
+          "explanation": "flush: 'pre'（既定）は DOM 更新「前」に走る。最新テキストを読みたければ flush: 'post' か nextTick を使う。"
+        },
+        {
+          "id": "b",
+          "label": "'init'（DOM 更新前なので前のテキストが見える）",
+          "isCorrect": true,
+          "explanation": "正解。watch は既定で flush: 'pre'（DOM 更新前）。textContent を読むと前回の 'init' が返ってくる。DOM を読むなら flush: 'post' に設定する必要がある。"
+        },
+        {
+          "id": "c",
+          "label": "undefined（template ref はマウント前なので参照できない）",
+          "isCorrect": false,
+          "explanation": "マウント済みなら el.value は要素を指す。問題文の状況ではマウント済み前提なので undefined にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "実行時エラー（flush は 'sync' か 'post' しか取らない）",
+          "isCorrect": false,
+          "explanation": "flush は 'pre' | 'post' | 'sync' の 3 値で、'pre' が既定。エラーにはならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Callback Flush Timing",
+          "url": "https://vuejs.org/guide/essentials/watchers.html#callback-flush-timing"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "「値が欲しい」なら computed、「何かしたい（副作用）」なら watch / watchEffect",
+      "computed はキャッシュあり・読み取り専用が原則。getter で副作用を書かない",
+      "watch は依存を明示・初回は走らない（immediate で初回も）。watchEffect は依存を自動追跡・即時 1 回実行",
+      "DOM を読む watch は flush: 'post' を指定する（既定は更新前）"
+    ],
+    "furtherReading": [
+      {
+        "title": "Vue.js — Computed Properties (公式ガイド)",
+        "url": "https://vuejs.org/guide/essentials/computed.html"
+      },
+      {
+        "title": "Vue.js — Watchers (公式ガイド)",
+        "url": "https://vuejs.org/guide/essentials/watchers.html"
+      }
+    ]
+  }
+}

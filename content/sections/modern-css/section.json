@@ -1,0 +1,13 @@
+{
+  "id": "modern-css",
+  "title": "モダン CSS の基礎",
+  "description": "カスケードレイヤー、コンテナクエリ、論理プロパティ、:has() セレクタ、新カラー関数を扱う。2025 年現在 Baseline で安定して使える機能を読めるようにする。",
+  "order": 4,
+  "lessons": [
+    "01-cascade-layers",
+    "02-container-queries",
+    "03-logical-properties",
+    "04-has-selector",
+    "05-color-functions"
+  ]
+}

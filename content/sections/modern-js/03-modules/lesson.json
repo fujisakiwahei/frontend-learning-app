@@ -1,0 +1,254 @@
+{
+  "id": "modern-js.modules",
+  "version": 1,
+  "title": "ESM と CommonJS の境界",
+  "estimatedMinutes": 6,
+  "tags": ["javascript", "modules", "esm"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "import か require か、その境界で何が起きているか",
+    "body": "Node.js では歴史的に CommonJS（require / module.exports）が使われ、ブラウザと足並みを揃える ES Modules（ESM: import / export）が後から標準化されました。Vue / Nuxt 等モダンなフロントエンドは ESM ベースですが、依存ライブラリには CJS のものも残っており、両者の境界での挙動を理解しておくと『なぜ import が動かないのか』『なぜ循環依存が壊れるのか』が読み解けます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "ESM の基本: 静的・厳密モード・トップレベル await",
+      "body": "ESM は **静的に解析可能** な構造を持ちます。`import` は実行時の式ではなく、ファイルの先頭にしか書けません（dynamic import は別構文）。これにより bundler が tree-shaking しやすく、`import` 元のパスもビルド時に確定します。\n\nESM はデフォルトで strict mode、ファイルスコープ、トップレベル `await` も使えます（Top-level await）。Node 18+ で `--experimental` 抜きで動作し、ブラウザでは `<script type=\"module\">` で読み込めます。",
+      "code": {
+        "lang": "ts",
+        "src": "// 静的 import\nimport { format } from 'date-fns'\nimport defaultLogger from './logger'\n\n// dynamic import（式として使える）\nconst mod = await import('./heavy-module')\n\n// 名前付き export\nexport function add(a: number, b: number) { return a + b }\nexport default class Foo {}"
+      },
+      "sources": [
+        {
+          "title": "MDN — JavaScript modules",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules"
+        }
+      ]
+    },
+    {
+      "heading": "CommonJS の挙動",
+      "body": "CommonJS は Node 由来の方式：`require('foo')` で同期的にロードし、`module.exports = ...` で公開します。実行時にロードされるので動的なパス計算ができますが、bundler の tree-shaking と相性が悪く、`exports` オブジェクトは『関数や class、プリミティブ』も含めて何でも入れられるため型推論や ESM からの interop で罠を生みます。\n\nNode は package.json の `\"type\": \"module\"` で各ファイルを ESM として扱うか、`.cjs` / `.mjs` 拡張子で個別に指定します。",
+      "code": {
+        "lang": "ts",
+        "src": "// CommonJS\nconst { format } = require('date-fns')\nmodule.exports = function logger() { /* ... */ }\n\n// package.json\n{ \"type\": \"module\" }  // 既定で .js を ESM 扱い"
+      },
+      "sources": [
+        {
+          "title": "Node.js — ECMAScript modules",
+          "url": "https://nodejs.org/api/esm.html"
+        },
+        {
+          "title": "Node.js — CommonJS modules",
+          "url": "https://nodejs.org/api/modules.html"
+        }
+      ]
+    },
+    {
+      "heading": "ESM と CJS の interop",
+      "body": "Node の ESM は CJS パッケージも `import` で読めるよう interop を提供します。ただし `module.exports = ...` の挙動次第で名前付き import が効かない場合があります：\n\n- `module.exports = something` → ESM 側からは default import で受け取る\n- `module.exports.foo = ...` → ESM 側からは default + 名前付きでも受け取れることがある（Node の静的解析次第）\n\nビルドツールでバンドルする場合は、ライブラリの ESM ビルドが提供されていればそちらを優先します。`package.json` の `exports` フィールドで条件付きエクスポート（`import` / `require`）を分けられます。",
+      "code": {
+        "lang": "ts",
+        "src": "// パッケージ側: package.json\n{\n  \"exports\": {\n    \".\": {\n      \"import\": \"./dist/index.mjs\",\n      \"require\": \"./dist/index.cjs\"\n    }\n  }\n}"
+      },
+      "sources": [
+        {
+          "title": "Node.js — package.json exports",
+          "url": "https://nodejs.org/api/packages.html#exports"
+        }
+      ]
+    },
+    {
+      "heading": "循環依存（circular import）の挙動",
+      "body": "ESM では循環依存があっても致命的にはなりません。バインディングは『参照』として共有されるため、片方が初期化前でも `undefined` が見えるだけで、後から評価されるコードでは正しい値が見えます。\n\nCommonJS は『同期ロード + 部分エクスポート』のため、循環依存に陥った時点で `module.exports` がまだ完成していない値を渡してしまうことがあります。デバッグが難しい『なぜか undefined』の典型パターンになるので、循環依存はそもそも避ける設計が原則です。",
+      "code": {
+        "lang": "ts",
+        "src": "// ESM の循環依存例（a.ts → b.ts → a.ts）\n// a.ts\nimport { fromB } from './b'\nexport const fromA = 1\nconsole.log(fromB) // 初期化順により undefined になる可能性\n\n// b.ts\nimport { fromA } from './a'\nexport const fromB = 2\nconsole.log(fromA)"
+      },
+      "sources": [
+        {
+          "title": "MDN — Modules — Circular imports",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードのうち ESM で正しく動くのはどれ？",
+      "code": {
+        "lang": "ts",
+        "src": "// A\nif (condition) { import { foo } from './a' }\n\n// B\nconst mod = await import('./a')\n\n// C\nmodule.exports = { foo: 1 }\n\n// D\nexport default class X {}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "A",
+          "isCorrect": false,
+          "explanation": "ESM の import 文はトップレベルにしか書けない。条件分岐の中では構文エラー。"
+        },
+        {
+          "id": "b",
+          "label": "B と D",
+          "isCorrect": true,
+          "explanation": "正解。dynamic import は式として書け、Top-level await も ESM で使える。default export も正しい構文。"
+        },
+        {
+          "id": "c",
+          "label": "C",
+          "isCorrect": false,
+          "explanation": "module.exports は CommonJS の構文。ESM では使えない。"
+        },
+        {
+          "id": "d",
+          "label": "A と C",
+          "isCorrect": false,
+          "explanation": "両方とも ESM では無効。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — import (dynamic)",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の package.json で Node が index.js を読むときの扱いは？",
+      "code": {
+        "lang": "json",
+        "src": "{ \"type\": \"module\" }"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": ".js ファイルが ESM として扱われる",
+          "isCorrect": true,
+          "explanation": "正解。\"type\": \"module\" を指定すると、その配下の .js は ESM として解釈される。CJS にしたい場合は .cjs を使う。"
+        },
+        {
+          "id": "b",
+          "label": "依存パッケージも全部 ESM に強制される",
+          "isCorrect": false,
+          "explanation": "影響範囲は自パッケージ。依存はそれぞれの package.json に従う。"
+        },
+        {
+          "id": "c",
+          "label": ".js ファイルが CommonJS として扱われる",
+          "isCorrect": false,
+          "explanation": "逆。指定がないときの既定が CJS。"
+        },
+        {
+          "id": "d",
+          "label": "TypeScript として扱われる",
+          "isCorrect": false,
+          "explanation": "type 指定と TypeScript は別物。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Node.js — package.json type field",
+          "url": "https://nodejs.org/api/packages.html#type"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "ライブラリを ESM と CommonJS の両方から使えるように公開したい。最も推奨される構成は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "package.json の exports に import / require の条件付きエントリを書き、両方のビルドを提供する",
+          "isCorrect": true,
+          "explanation": "正解。Node 公式の dual package パターン。利用側の環境に応じて適切なファイルが読まれる。"
+        },
+        {
+          "id": "b",
+          "label": "main フィールドに .js を 1 つだけ書く",
+          "isCorrect": false,
+          "explanation": "ESM 利用時に CJS が読まれて互換性問題が起きる。"
+        },
+        {
+          "id": "c",
+          "label": "ESM 専用に絞り、CJS 利用者は諦めてもらう",
+          "isCorrect": false,
+          "explanation": "現実の Node エコシステムでは CJS も多く、利用者を狭めることになる。"
+        },
+        {
+          "id": "d",
+          "label": "全部 .mjs にして package.json は空にする",
+          "isCorrect": false,
+          "explanation": "exports の指定が無いと bundler の解決が不安定になる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Node.js — Dual CJS/ESM Package",
+          "url": "https://nodejs.org/api/packages.html#dual-commonjses-module-packages"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "ESM での循環依存（a.ts と b.ts が互いに import）の挙動として正しいのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "ロード時に必ず TypeError になる",
+          "isCorrect": false,
+          "explanation": "致命的エラーにはならず、初期化順で undefined が見える可能性がある。"
+        },
+        {
+          "id": "b",
+          "label": "バインディングは参照として共有されるので致命的ではないが、評価順次第で一時的に undefined になることがある",
+          "isCorrect": true,
+          "explanation": "正解。ESM の named import は live binding。後から評価される箇所では正しい値が見えるが、初期化途中で読むと undefined になりうる。"
+        },
+        {
+          "id": "c",
+          "label": "片方が完全に無視される",
+          "isCorrect": false,
+          "explanation": "そのような挙動はない。"
+        },
+        {
+          "id": "d",
+          "label": "tree-shaking で循環依存が自動解消される",
+          "isCorrect": false,
+          "explanation": "tree-shaking は未使用 export を削るだけで、循環構造を解消しない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Modules — Circular imports",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "ESM は静的・strict・トップレベル await 可。import はファイル先頭、動的読込は import() 式",
+      "CommonJS は require / module.exports。動的だが tree-shaking と相性が悪い",
+      "package.json の \"type\": \"module\" / exports フィールドで ESM/CJS を切り分ける",
+      "循環依存は ESM では『undefined を一時的に見る』程度で済むが、設計で避けるのが鉄則"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — JavaScript modules",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules"
+      },
+      {
+        "title": "Node.js — Packages",
+        "url": "https://nodejs.org/api/packages.html"
+      }
+    ]
+  }
+}

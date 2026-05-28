@@ -1,0 +1,262 @@
+{
+  "id": "nuxt-data-fetching.server-api-routes",
+  "version": 1,
+  "title": "server/api ルートと Nitro エンドポイント",
+  "estimatedMinutes": 6,
+  "tags": ["nuxt", "nitro", "api"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "Nuxt の中に Web サーバが住んでいる",
+    "body": "Nuxt 3 / 4 は Nitro という Web サーバを内蔵しており、`server/api/` 配下のファイルがそのまま API エンドポイントになります。Express も Fastify も別途立てる必要はなく、フロントと同じリポジトリで型・ユーティリティを共有しながらサーバ処理を書けます。これが Nuxt が『フルスタックフレームワーク』と呼ばれる根拠です。"
+  },
+
+  "explanations": [
+    {
+      "heading": "ファイル＝エンドポイント",
+      "body": "`server/api/<name>.ts` を作ると `/api/<name>` で叩けるエンドポイントになります。デフォルトエクスポートは `defineEventHandler` でハンドラを定義します。動的セグメントは `[id].ts`、HTTP メソッド指定は `users.get.ts` のように `.<method>.ts` サフィックスを付けます。\n\nハンドラの戻り値はそのまま JSON 化されてクライアントに返ります。`event` は H3 のイベントオブジェクトで、リクエスト・レスポンスの両方を保持します。",
+      "code": {
+        "lang": "ts",
+        "src": "// server/api/users/[id].get.ts\nexport default defineEventHandler(async (event) => {\n  const id = getRouterParam(event, 'id')\n  const user = await db.users.findById(id)\n  if (!user) throw createError({ statusCode: 404, statusMessage: 'Not Found' })\n  return user\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Server Routes",
+          "url": "https://nuxt.com/docs/guide/directory-structure/server"
+        },
+        {
+          "title": "H3 — Event Handler",
+          "url": "https://h3.unjs.io/utils/event-handler"
+        }
+      ]
+    },
+    {
+      "heading": "リクエストの読み方",
+      "body": "頻出ユーティリティ：\n\n- `getRouterParam(event, 'id')`: 動的セグメント取得\n- `getQuery(event)`: クエリ文字列をオブジェクトで取得\n- `readBody(event)`: POST 等のボディを取得（自動で JSON パース）\n- `getHeader(event, 'authorization')`: ヘッダ取得\n- `setResponseStatus(event, 201)`: ステータスコード設定\n- `createError({ statusCode, statusMessage })`: throw でエラーレスポンス\n\n型安全に書くなら入力は Zod 等で検証してから処理に渡すのが定石です。",
+      "code": {
+        "lang": "ts",
+        "src": "import { z } from 'zod'\n\nconst Body = z.object({ name: z.string().min(1), email: z.string().email() })\n\nexport default defineEventHandler(async (event) => {\n  const raw = await readBody(event)\n  const parsed = Body.safeParse(raw)\n  if (!parsed.success) {\n    throw createError({ statusCode: 400, statusMessage: 'Invalid body' })\n  }\n  return await db.users.create(parsed.data)\n})"
+      },
+      "sources": [
+        {
+          "title": "H3 — Utilities",
+          "url": "https://h3.unjs.io/utils"
+        }
+      ]
+    },
+    {
+      "heading": "useFetch と server/api は型を共有できる",
+      "body": "Nuxt は `server/api/` の戻り値型を `$fetch` / `useFetch` から推論できます。`useFetch('/api/users/1')` の `data` は自動的にハンドラの戻り値型になり、フロントとサーバの間で型ズレが起きにくい設計です。\n\nただし auto-import の都合で **戻り値の型を明示エクスポート**しないと推論が外れることもあります。複雑な型は `// server/api/users/[id].get.ts` の中で `User` 型を import し、戻り値を `User` 型として返すよう書きます。",
+      "code": {
+        "lang": "ts",
+        "src": "// 共有型: shared/types.ts\nexport interface User { id: string; name: string }\n\n// server/api/users/[id].get.ts\nimport type { User } from '~/shared/types'\nexport default defineEventHandler(async (event): Promise<User> => {\n  return { id: getRouterParam(event, 'id')!, name: 'Alice' }\n})\n\n// pages/user.vue\nconst { data } = await useFetch('/api/users/1') // data: Ref<User | null>"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Typed API Routes",
+          "url": "https://nuxt.com/docs/guide/recipes/custom-usefetch"
+        }
+      ]
+    },
+    {
+      "heading": "サーバミドルウェアと plugins",
+      "body": "API ハンドラとは別に、リクエスト前処理を行う `server/middleware/` と、Nitro 起動時に走る `server/plugins/` があります。\n\n- **server/middleware/<name>.ts**: 全 API リクエスト前に走る。認証ヘッダの検証、ログ計測、CORS、レート制限など\n- **server/plugins/<name>.ts**: アプリ起動時に走る。DB 接続プールの初期化、外部サービス SDK のセットアップなど\n\nミドルウェアでレスポンスを返したい場合は `event.respondWith` ではなく、`createError` で throw するかハンドラ側で処理を分岐させるのが慣例です。",
+      "code": {
+        "lang": "ts",
+        "src": "// server/middleware/log.ts\nexport default defineEventHandler((event) => {\n  console.log(`[req] ${event.method} ${event.path}`)\n})\n\n// server/plugins/db.ts\nexport default defineNitroPlugin(async () => {\n  await initDbPool()\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — Server Middleware",
+          "url": "https://nuxt.com/docs/guide/directory-structure/server#server-middleware"
+        },
+        {
+          "title": "Nuxt — Server Plugins",
+          "url": "https://nuxt.com/docs/guide/directory-structure/server#server-plugins"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のファイル名と対応する HTTP メソッド・パスとして正しいのは？ `server/api/posts/[id].patch.ts`",
+      "choices": [
+        {
+          "id": "a",
+          "label": "PATCH /api/posts/:id",
+          "isCorrect": true,
+          "explanation": "正解。動的セグメントは [id]、`.patch` サフィックスで PATCH メソッド限定になる。"
+        },
+        {
+          "id": "b",
+          "label": "POST /api/posts/[id]/patch",
+          "isCorrect": false,
+          "explanation": "`.patch.ts` はファイル名のサフィックスで、URL の一部にはならない。"
+        },
+        {
+          "id": "c",
+          "label": "全 HTTP メソッドで /api/posts/:id にマッチする",
+          "isCorrect": false,
+          "explanation": "`.patch.ts` は PATCH 限定。メソッド指定なしにしたいなら `[id].ts` と書く。"
+        },
+        {
+          "id": "d",
+          "label": "GET /api/posts/:id（ファイル名のサフィックスは無視される）",
+          "isCorrect": false,
+          "explanation": "サフィックスは Nuxt のメソッド指定構文で無視されない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Matching HTTP Method",
+          "url": "https://nuxt.com/docs/guide/directory-structure/server#matching-http-method"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のハンドラで起きることは？",
+      "code": {
+        "lang": "ts",
+        "src": "export default defineEventHandler(async (event) => {\n  const body = await readBody(event)\n  if (!body.email) {\n    throw createError({ statusCode: 400, statusMessage: 'email required' })\n  }\n  return { ok: true }\n})"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "email が空のリクエストは 400 のレスポンスを返す",
+          "isCorrect": true,
+          "explanation": "正解。createError で throw すると Nitro が拾って指定ステータスのレスポンスを返す。"
+        },
+        {
+          "id": "b",
+          "label": "throw した時点でサーバプロセスがクラッシュする",
+          "isCorrect": false,
+          "explanation": "createError は Nitro のエラーフローで処理される。プロセスはクラッシュしない。"
+        },
+        {
+          "id": "c",
+          "label": "throw が無視され、{ ok: true } が返る",
+          "isCorrect": false,
+          "explanation": "throw されると以降のコードは実行されない。"
+        },
+        {
+          "id": "d",
+          "label": "createError は async ハンドラでは使えずエラーになる",
+          "isCorrect": false,
+          "explanation": "createError は async ハンドラでも使える定番ユーティリティ。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Error Handling",
+          "url": "https://nuxt.com/docs/getting-started/error-handling"
+        },
+        {
+          "title": "H3 — createError",
+          "url": "https://h3.unjs.io/utils/response#createerror"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "全 API リクエストに対して JWT を検証し、失敗したら 401 を返したい。最も適切な実装場所は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "server/middleware/auth.ts に書く",
+          "isCorrect": true,
+          "explanation": "正解。リクエスト前処理として全 API に効かせる用途はサーバミドルウェアが最適。各ハンドラに認証コードを書かずに済む。"
+        },
+        {
+          "id": "b",
+          "label": "ハンドラごとに同じ検証ロジックをコピペする",
+          "isCorrect": false,
+          "explanation": "重複が増え、ハンドラ追加時の認証漏れリスクが高い。"
+        },
+        {
+          "id": "c",
+          "label": "ルートミドルウェア（フロント側）で検証する",
+          "isCorrect": false,
+          "explanation": "フロントの middleware はページ遷移のガードで、API リクエスト自体は素通りする。API を直接叩かれたら無防備になる。"
+        },
+        {
+          "id": "d",
+          "label": "server/plugins で起動時に検証する",
+          "isCorrect": false,
+          "explanation": "plugins は起動時 1 回。リクエストごとには走らない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Server Middleware",
+          "url": "https://nuxt.com/docs/guide/directory-structure/server#server-middleware"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "外部 API のキーをフロントから隠して呼びたい。最も適切な構成は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "server/api/proxy.ts でキーを runtimeConfig.* から読み、外部 API を呼んだ結果だけクライアントに返す",
+          "isCorrect": true,
+          "explanation": "正解。Nuxt の runtimeConfig はサーバ専用キーを安全に置ける場所。クライアントには結果だけが届き、キーは漏れない。"
+        },
+        {
+          "id": "b",
+          "label": "process.env.* をクライアントの useFetch から直接読む",
+          "isCorrect": false,
+          "explanation": "process.env はビルド時にバンドルへ展開されるとブラウザ側へ漏れる可能性がある。runtimeConfig の public でないキーを使う。"
+        },
+        {
+          "id": "c",
+          "label": "useFetch でフロントから外部 API を直接叩き、ヘッダにキーを乗せる",
+          "isCorrect": false,
+          "explanation": "ブラウザのネットワークから丸見えになる。秘密キーには絶対使ってはいけない。"
+        },
+        {
+          "id": "d",
+          "label": "公開リポジトリの .env に書いて Git で配布する",
+          "isCorrect": false,
+          "explanation": "秘密情報を Git に上げてはいけない。.env はリポジトリに含めない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Runtime Config",
+          "url": "https://nuxt.com/docs/guide/going-further/runtime-config"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "server/api/<name>.ts がそのまま /api/<name> のエンドポイント。`.<method>.ts` でメソッド固定、`[param]` で動的セグメント",
+      "リクエストは getRouterParam / getQuery / readBody / getHeader で読み、エラーは createError で throw",
+      "フロントの useFetch とサーバハンドラは型を共有できる（戻り値を明示型付け）",
+      "全リクエスト前処理は server/middleware、起動時 1 回は server/plugins、秘密キーは runtimeConfig"
+    ],
+    "furtherReading": [
+      {
+        "title": "Nuxt — Server Routes",
+        "url": "https://nuxt.com/docs/guide/directory-structure/server"
+      },
+      {
+        "title": "Nuxt — Runtime Config",
+        "url": "https://nuxt.com/docs/guide/going-further/runtime-config"
+      },
+      {
+        "title": "H3 — Documentation",
+        "url": "https://h3.unjs.io/"
+      }
+    ]
+  }
+}

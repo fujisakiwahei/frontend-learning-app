@@ -1,0 +1,13 @@
+{
+  "id": "modern-js",
+  "title": "モダン JavaScript の基礎",
+  "description": "==/=== と型強制、Promise / async / await とイベントループ、ESM と CommonJS、配列メソッド、オプショナルチェイニングと nullish coalescing を扱う。",
+  "order": 5,
+  "lessons": [
+    "01-equality-coercion",
+    "02-async-patterns",
+    "03-modules",
+    "04-array-methods",
+    "05-optional-chaining"
+  ]
+}

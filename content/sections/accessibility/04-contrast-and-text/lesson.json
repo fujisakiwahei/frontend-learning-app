@@ -1,0 +1,246 @@
+{
+  "id": "accessibility.contrast-and-text",
+  "version": 1,
+  "title": "コントラストとテキストサイズ",
+  "estimatedMinutes": 5,
+  "tags": ["a11y", "contrast", "typography"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "WCAG の数字を 3 つだけ覚える",
+    "body": "アクセシビリティ基準 WCAG 2.x の達成基準のうち、コントラストとテキストでは『AA: 通常テキスト 4.5:1、大きいテキスト 3:1、非テキスト UI 3:1』の 3 つを覚えれば実務の判断にほぼ足ります。最近では新基準 APCA も登場していますが、まずは確立された WCAG 2 の指標を押さえます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "コントラスト比の 4.5:1 ルール",
+      "body": "WCAG 2.x AA レベルでは：\n\n- 通常サイズの本文テキスト: 背景とのコントラスト比 **4.5:1 以上**\n- 大きいテキスト（18pt 以上 or 14pt 以上の太字 ≒ 24px 以上 or 19px 以上の太字）: **3:1 以上**\n- フォーム入力境界・アイコンなど非テキスト UI: **3:1 以上**\n- 装飾的な要素・無効化（disabled）状態は対象外\n\nDevTools の Lighthouse、`axe DevTools`、Figma のコントラストチェッカーなどで数値を確認できます。",
+      "code": {
+        "lang": "css",
+        "src": "/* 本文: 白背景に #757575 → 4.6:1 でギリギリ AA 通過 */\nbody { background: #fff; color: #757575; }\n\n/* 注釈: #999 だと 2.8:1 で AA 落ち。装飾用テキストでも避ける */"
+      },
+      "sources": [
+        {
+          "title": "WCAG 2.2 — 1.4.3 Contrast (Minimum)",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+        },
+        {
+          "title": "WCAG 2.2 — 1.4.11 Non-text Contrast",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+        }
+      ]
+    },
+    {
+      "heading": "テキストサイズと拡大",
+      "body": "WCAG 1.4.4 Resize text は『200% までテキストを拡大しても情報や機能が失われない』ことを要求します。これを満たすには：\n\n- フォントサイズに `px` 固定ではなく `rem` を使う（ユーザーのブラウザ既定サイズに追従）\n- レイアウトを `vw` 固定で組まない（極端な拡大で崩れる）\n- 行の折り返しを許す（`white-space: nowrap` を多用しない）\n- ボタンや入力欄も relative なサイズに\n\n本文の最小サイズはモバイルで 16px（= 1rem）が一般的な下限。それ未満は『小さすぎる』ユーザビリティ警告が出やすくなります。",
+      "code": {
+        "lang": "css",
+        "src": "html { font-size: 16px; }\nbody { font-size: 1rem; line-height: 1.6; }\nh1   { font-size: 2rem; }\n.btn { padding: 0.6rem 1rem; }"
+      },
+      "sources": [
+        {
+          "title": "WCAG 2.2 — 1.4.4 Resize text",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html"
+        }
+      ]
+    },
+    {
+      "heading": "色だけに頼らない",
+      "body": "WCAG 1.4.1 は『色を **唯一の手段** として情報を伝えない』ことを求めます。グラフで色だけで系統を区別する、エラーを赤色だけで示す、リンクを色だけで識別する、といった作りはアウト。\n\n- 必須項目: アスタリスク（*）＋テキスト『必須』を添える\n- リンク: 色変化＋下線（または別の視覚的識別）\n- グラフ: 色＋パターン／凡例＋ラベル\n\n色覚特性のユーザー、グレースケール印刷、低照度の屋外利用などをカバーする要件です。",
+      "code": {
+        "lang": "css",
+        "src": "/* ❌ リンクが色だけで本文と区別される */\na { color: blue; text-decoration: none; }\n\n/* ✅ 色 + 下線 */\na { color: blue; text-decoration: underline; }"
+      },
+      "sources": [
+        {
+          "title": "WCAG 2.2 — 1.4.1 Use of Color",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+        }
+      ]
+    },
+    {
+      "heading": "prefers-reduced-motion を尊重する",
+      "body": "ユーザーが OS で『視差効果を減らす』『アニメーションを減らす』設定をしている場合、ブラウザは `prefers-reduced-motion: reduce` メディアクエリで通知します。\n\n激しいアニメーション、視差スクロール、急激なフェードなどは、前庭障害を持つユーザーには体調不良の原因になり得ます。`@media (prefers-reduced-motion: reduce)` で `animation: none` / `transition-duration: 0.01ms` などに切り替えるのが定石です。",
+      "code": {
+        "lang": "css",
+        "src": "@media (prefers-reduced-motion: reduce) {\n  * {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n    scroll-behavior: auto !important;\n  }\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — prefers-reduced-motion",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "通常サイズの本文テキストのコントラスト比、WCAG 2 AA の最低基準は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "4.5:1",
+          "isCorrect": true,
+          "explanation": "正解。通常テキストの AA 基準は 4.5:1。AAA は 7:1。"
+        },
+        {
+          "id": "b",
+          "label": "3:1",
+          "isCorrect": false,
+          "explanation": "3:1 は大きいテキストと非テキスト UI の基準。"
+        },
+        {
+          "id": "c",
+          "label": "7:1",
+          "isCorrect": false,
+          "explanation": "それは AAA レベル。AA はもう少し緩い 4.5:1。"
+        },
+        {
+          "id": "d",
+          "label": "規定なし",
+          "isCorrect": false,
+          "explanation": "WCAG で明確に規定されている。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "WCAG 2.2 — 1.4.3 Contrast (Minimum)",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "design-judgment-4choice",
+      "prompt": "リンクと本文を区別する方法として WCAG 1.4.1 を満たすのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "色を変える + 下線も付ける（色だけに頼らない）",
+          "isCorrect": true,
+          "explanation": "正解。色 + 別の視覚的識別の組み合わせで、色覚特性ユーザーにも区別可能になる。"
+        },
+        {
+          "id": "b",
+          "label": "色だけで区別、下線は美観のため消す",
+          "isCorrect": false,
+          "explanation": "色のみによる識別は 1.4.1 違反。色覚特性ユーザーに区別が伝わらない。"
+        },
+        {
+          "id": "c",
+          "label": "リンクと本文を視覚的に区別しない",
+          "isCorrect": false,
+          "explanation": "リンクとして認識できない。"
+        },
+        {
+          "id": "d",
+          "label": "リンクは必ず色を青にすれば良い",
+          "isCorrect": false,
+          "explanation": "色だけでは不十分。下線等の追加識別が必要。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "WCAG 2.2 — 1.4.1 Use of Color",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "code-reading-4choice",
+      "prompt": "次のうち prefers-reduced-motion を尊重した CSS として正しいのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "@media (prefers-reduced-motion: reduce) { * { animation: none; transition: none; } }",
+          "isCorrect": true,
+          "explanation": "正解。ユーザーがアニメーション削減を望んでいるときに動きを抑える典型パターン。"
+        },
+        {
+          "id": "b",
+          "label": "@media (prefers-reduced-motion: full) { ... }",
+          "isCorrect": false,
+          "explanation": "full という値は存在しない。reduce / no-preference の 2 値。"
+        },
+        {
+          "id": "c",
+          "label": "JavaScript で navigator.reducedMotion を読む",
+          "isCorrect": false,
+          "explanation": "そのような標準 API は無い。matchMedia で取得する。"
+        },
+        {
+          "id": "d",
+          "label": "@supports (motion: reduce) { ... }",
+          "isCorrect": false,
+          "explanation": "@supports は機能サポート判定。prefers-reduced-motion は @media。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — prefers-reduced-motion",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "本文のフォントサイズを設計するとき、最も妥当な方針は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "rem を基準にする（ユーザー設定の文字サイズに追従）",
+          "isCorrect": true,
+          "explanation": "正解。rem はルートフォントサイズ基準で、ブラウザ／OS の文字サイズ設定にも追従する。アクセシビリティと互換性の両面で標準的。"
+        },
+        {
+          "id": "b",
+          "label": "px 固定で揃える",
+          "isCorrect": false,
+          "explanation": "ユーザーのフォントサイズ設定に追従しない。1.4.4 Resize text の達成が難しい。"
+        },
+        {
+          "id": "c",
+          "label": "vw 固定にして画面幅で滑らかにスケール",
+          "isCorrect": false,
+          "explanation": "拡大時にレイアウトが破綻しやすい。clamp と rem の併用が現代的。"
+        },
+        {
+          "id": "d",
+          "label": "JS でユーザーエージェントを判定して動的に切り替える",
+          "isCorrect": false,
+          "explanation": "rem と CSS で十分にカバーできる。JS で再実装は過剰。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "WCAG 2.2 — 1.4.4 Resize text",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "WCAG 2 AA: 本文 4.5:1 / 大きいテキスト 3:1 / 非テキスト UI 3:1",
+      "テキストサイズは rem 基準。200% 拡大で崩れない設計",
+      "色を唯一の手段にしない（色 + 下線 / アイコン / テキスト）",
+      "prefers-reduced-motion を尊重し、激しいアニメは抑制する"
+    ],
+    "furtherReading": [
+      {
+        "title": "WCAG 2.2 — Quick Reference",
+        "url": "https://www.w3.org/WAI/WCAG22/quickref/"
+      },
+      {
+        "title": "MDN — Accessibility",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility"
+      }
+    ]
+  }
+}

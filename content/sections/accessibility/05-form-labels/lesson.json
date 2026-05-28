@@ -1,0 +1,254 @@
+{
+  "id": "accessibility.form-labels",
+  "version": 1,
+  "title": "フォームのラベリングとエラー通知",
+  "estimatedMinutes": 6,
+  "tags": ["a11y", "forms"],
+  "prerequisites": ["accessibility.aria-attributes"],
+
+  "intro": {
+    "headline": "label と input を確実に繋ぐ／エラーを耳に届ける",
+    "body": "アクセシブルなフォームは『各入力にラベルが結び付いていて、エラーがスクリーンリーダーにも届くこと』が最低条件です。ラベル結合は HTML だけで完結し、エラー通知は live region で読み上げに乗せます。実装ミスが起きやすい箇所なのでパターンを覚えてしまうのが近道。"
+  },
+
+  "explanations": [
+    {
+      "heading": "<label for=\"id\"> で確実に結合",
+      "body": "ラベルと入力の結び付け方は 2 つ：\n\n- **明示的**: `<label for=\"email\">メール</label><input id=\"email\">`\n- **暗黙的**: `<label>メール<input></label>`（label が input を内包）\n\nどちらも有効ですが、CSS / レイアウトの自由度から明示的（for + id）が一般的です。**ラベルが無い、または結びついていない入力欄** はスクリーンリーダーで『編集テキスト』としか読み上げられず、目的が伝わりません。\n\nプレースホルダ（placeholder）はラベル代わりにできません。focus すると消える、コントラストが低い、自動翻訳の影響を受ける、など複数の問題があります。",
+      "code": {
+        "lang": "html",
+        "src": "<!-- ✅ 明示的 -->\n<label for=\"email\">メール</label>\n<input id=\"email\" type=\"email\" />\n\n<!-- ❌ placeholder のみ（ラベル無し）-->\n<input type=\"email\" placeholder=\"メール\" />"
+      },
+      "sources": [
+        {
+          "title": "MDN — <label>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label"
+        },
+        {
+          "title": "WCAG 2.2 — 3.3.2 Labels or Instructions",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/labels-or-instructions.html"
+        }
+      ]
+    },
+    {
+      "heading": "type と autocomplete を正しく設定",
+      "body": "適切な `type` 属性はモバイルキーボードの最適化、ブラウザの内蔵バリデーション、autofill の精度に直結します。\n\n- メール: `type=\"email\"` + `autocomplete=\"email\"`\n- 電話: `type=\"tel\"` + `autocomplete=\"tel\"`\n- 数値: `type=\"number\"` または `inputmode=\"numeric\"`\n- パスワード: `type=\"password\"` + `autocomplete=\"current-password\"` / `\"new-password\"`\n\n`autocomplete` は WCAG 1.3.5 Identify Input Purpose の達成にも関わり、自動入力が効くと記憶や運動の負担が減ります。",
+      "code": {
+        "lang": "html",
+        "src": "<label for=\"email\">メール</label>\n<input id=\"email\" type=\"email\" autocomplete=\"email\" required />\n\n<label for=\"pw\">パスワード</label>\n<input id=\"pw\" type=\"password\" autocomplete=\"current-password\" required />"
+      },
+      "sources": [
+        {
+          "title": "MDN — autocomplete",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/autocomplete"
+        },
+        {
+          "title": "WCAG 2.2 — 1.3.5 Identify Input Purpose",
+          "url": "https://www.w3.org/WAI/WCAG22/Understanding/identify-input-purpose.html"
+        }
+      ]
+    },
+    {
+      "heading": "エラーを aria-describedby と live region で伝える",
+      "body": "エラーメッセージは『視覚だけでなくスクリーンリーダーにも届く』必要があります：\n\n1. 入力欄に `aria-invalid=\"true\"`（あるいは `:invalid` を CSS で利用）\n2. エラー文の id を `aria-describedby` で結合\n3. エラー文の **コンテナ** を `aria-live=\"polite\"`（または `assertive`）にして、追加・変更時に読み上げさせる\n\n`aria-live=\"polite\"` は今読んでいる内容を中断せず読み上げ、`assertive` は割り込みます。フォーム送信時のエラー集約には polite が一般的です。",
+      "code": {
+        "lang": "html",
+        "src": "<label for=\"email\">メール</label>\n<input\n  id=\"email\" type=\"email\"\n  :aria-invalid=\"!!error\"\n  aria-describedby=\"email-error\"\n/>\n<p id=\"email-error\" aria-live=\"polite\">{{ error }}</p>"
+      },
+      "sources": [
+        {
+          "title": "MDN — aria-invalid",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-invalid"
+        },
+        {
+          "title": "MDN — aria-live",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-live"
+        }
+      ]
+    },
+    {
+      "heading": "必須項目とグループ化",
+      "body": "必須は HTML 標準の `required` を付けます。これでブラウザの内蔵検証と `:required` / `:invalid` の CSS マッチ、`aria-required` 相当の意味付けが自動で揃います。視覚的にはアスタリスク *（と凡例『* は必須』）を付けるのが定石です。\n\n複数の入力をひとまとめにしたい場合（住所、ラジオボタン群など）は `<fieldset>` でグループ化し、`<legend>` でグループ名を付けます。スクリーンリーダーが各 input ごとにグループ名を補って読み上げてくれるため、文脈が分かりやすくなります。",
+      "code": {
+        "lang": "html",
+        "src": "<fieldset>\n  <legend>性別</legend>\n  <label><input type=\"radio\" name=\"gender\" value=\"m\" /> 男性</label>\n  <label><input type=\"radio\" name=\"gender\" value=\"f\" /> 女性</label>\n  <label><input type=\"radio\" name=\"gender\" value=\"o\" /> その他</label>\n</fieldset>"
+      },
+      "sources": [
+        {
+          "title": "MDN — <fieldset> / <legend>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/fieldset"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "design-judgment-4choice",
+      "prompt": "メール入力欄のラベルとして最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "<label for=\"email\">メール</label><input id=\"email\" type=\"email\" autocomplete=\"email\" />",
+          "isCorrect": true,
+          "explanation": "正解。明示的なラベル結合、適切な type、autocomplete の 3 点が揃っている。"
+        },
+        {
+          "id": "b",
+          "label": "<input type=\"email\" placeholder=\"メール\" />",
+          "isCorrect": false,
+          "explanation": "placeholder はラベルの代替にならない。focus で消える等の問題も。"
+        },
+        {
+          "id": "c",
+          "label": "<div>メール</div><input type=\"text\" />",
+          "isCorrect": false,
+          "explanation": "<div> はラベルとして結合されない。type も email でない。"
+        },
+        {
+          "id": "d",
+          "label": "<label>メール: <input type=\"email\" /></label> （ただし for と id は無し）",
+          "isCorrect": false,
+          "explanation": "暗黙的結合は有効だが、明示的のほうが UI 上の自由度・将来の保守性が高く一般的。本問では autocomplete も無いので最適ではない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — <label>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "design-judgment-4choice",
+      "prompt": "フォーム送信時のエラーメッセージをスクリーンリーダーに読み上げさせるには？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "エラー文のコンテナに aria-live=\"polite\" を付け、aria-describedby で input と結合する",
+          "isCorrect": true,
+          "explanation": "正解。live region により後から表示されたエラーが読み上げられ、describedby で個別 input にも紐づく。"
+        },
+        {
+          "id": "b",
+          "label": "alert() でブラウザのダイアログを出す",
+          "isCorrect": false,
+          "explanation": "ユーザーを止め、操作性も低い。最近のブラウザで読み上げ挙動も標準化されていない。"
+        },
+        {
+          "id": "c",
+          "label": "console.error にエラーを出力する",
+          "isCorrect": false,
+          "explanation": "コンソールはエンドユーザーに届かない。"
+        },
+        {
+          "id": "d",
+          "label": "input の placeholder にエラー文を入れる",
+          "isCorrect": false,
+          "explanation": "placeholder は値入力で消える。ラベル / エラーの代替には使えない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — aria-live",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-live"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "code-reading-4choice",
+      "prompt": "ラジオボタン群（性別など）のセマンティックなまとめ方として正しいのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "<fieldset><legend>性別</legend>...</fieldset>",
+          "isCorrect": true,
+          "explanation": "正解。fieldset で関連入力をグループ化、legend でグループ名を提示。スクリーンリーダーが各 input にグループ名を付して読み上げる。"
+        },
+        {
+          "id": "b",
+          "label": "<div><h3>性別</h3>...</div>",
+          "isCorrect": false,
+          "explanation": "見出しはグループとして認識されない。"
+        },
+        {
+          "id": "c",
+          "label": "ラジオボタンごとに aria-label を付ける",
+          "isCorrect": false,
+          "explanation": "各オプションは label で付与する。グループ名は別途必要。"
+        },
+        {
+          "id": "d",
+          "label": "そのまま input を並べるだけ",
+          "isCorrect": false,
+          "explanation": "グループ化が分からない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — <fieldset>",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/fieldset"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "必須項目を示す最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "input に required を付け、ラベルにアスタリスク * と『* は必須』凡例を添える",
+          "isCorrect": true,
+          "explanation": "正解。HTML の required で意味付け、視覚的にも凡例で意味を補完。色だけに頼らない設計。"
+        },
+        {
+          "id": "b",
+          "label": "色（赤い枠）だけで示す",
+          "isCorrect": false,
+          "explanation": "色だけは WCAG 1.4.1 違反。"
+        },
+        {
+          "id": "c",
+          "label": "label に （必須）と書くだけで required は付けない",
+          "isCorrect": false,
+          "explanation": "視覚的には伝わるがブラウザのバリデーションが効かず、aria 的な意味付けも弱い。"
+        },
+        {
+          "id": "d",
+          "label": "送信時に検証して、必須漏れがあれば alert() を出す",
+          "isCorrect": false,
+          "explanation": "未入力のままユーザーが進む経路が前提になり、UX が悪化する。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — required attribute",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/required"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "ラベルは <label for=\"id\"> + id で確実に結合。placeholder はラベルの代わりにならない",
+      "適切な type と autocomplete でモバイル入力と autofill を最適化",
+      "エラーは aria-describedby で結合し、live region（aria-live=\"polite\"）で読み上げに乗せる",
+      "ラジオ／チェックボックス群は <fieldset> + <legend> でグループ化。必須は required + 視覚的凡例"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Form accessibility",
+        "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms"
+      },
+      {
+        "title": "WAI — Forms Tutorial",
+        "url": "https://www.w3.org/WAI/tutorials/forms/"
+      }
+    ]
+  }
+}

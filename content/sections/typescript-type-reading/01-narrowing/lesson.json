@@ -1,0 +1,254 @@
+{
+  "id": "typescript-type-reading.narrowing",
+  "version": 1,
+  "title": "型ガードとナローイング",
+  "estimatedMinutes": 6,
+  "tags": ["typescript", "narrowing"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "「ここから先は string」を TypeScript に教える",
+    "body": "TypeScript の型ナローイングは、条件分岐の中で『この変数はここでは string 確定』と推論を絞り込む機能です。`typeof` / `instanceof` / リテラル比較 / `in` / `Array.isArray` / 自前の型ガード関数（ユーザー定義型ガード）など複数の道具があり、コードリーディングではどの条件が型を絞っているかを読み取れることが重要になります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "typeof / instanceof / literal でのナローイング",
+      "body": "もっとも基本の 3 つは `typeof` / `instanceof` / リテラル比較。`typeof x === 'string'` の真の分岐では x は string に絞られ、`x instanceof Date` の真の分岐では Date インスタンスに絞られます。\n\n判別可能ユニオン（discriminated union）はリテラル比較を活用するパターンで、共通の文字列リテラルフィールド（タグ）で分岐するだけで型が絞り込まれます。これは Vue/React のイベント型・状態管理の Reducer 等で頻出します。",
+      "code": {
+        "lang": "ts",
+        "src": "function fmt(v: string | number | Date) {\n  if (typeof v === 'string') return v.toUpperCase()  // v: string\n  if (v instanceof Date) return v.toISOString()       // v: Date\n  return v.toFixed(2)                                  // v: number\n}\n\ntype Action =\n  | { type: 'add'; value: number }\n  | { type: 'reset' }\n\nfunction handle(a: Action) {\n  if (a.type === 'add') a.value // ok: { type: 'add'; value: number }\n  else a // { type: 'reset' }\n}"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Narrowing",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+        },
+        {
+          "title": "TypeScript — Discriminated Unions",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions"
+        }
+      ]
+    },
+    {
+      "heading": "in 演算子と Array.isArray",
+      "body": "`'foo' in obj` でプロパティの存在を条件化すると、その分岐の中で `obj` の型が絞られます。フィールドが部分的に異なるユニオン型を区別したいときに使えます。\n\n配列かどうかの判定は `Array.isArray(x)` が頻出。`x` が `T | T[]` のような型のときに正しく `T[]` 側へ絞れます。`typeof x === 'object'` だけだと null も含むので不十分です。",
+      "code": {
+        "lang": "ts",
+        "src": "type R = { user: string } | { error: string }\nfunction h(r: R) {\n  if ('user' in r) console.log(r.user)\n  else console.log(r.error)\n}\n\nfunction first<T>(x: T | T[]) {\n  return Array.isArray(x) ? x[0] : x\n}"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — in narrowing",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#the-in-operator-narrowing"
+        }
+      ]
+    },
+    {
+      "heading": "ユーザー定義型ガード（is）",
+      "body": "複雑な判定を関数化したいときは戻り値の型を `x is T` の形で宣言します。これがユーザー定義型ガードで、真を返した分岐で TypeScript が `x` を `T` 型に絞ります。\n\n気をつけたいのは『判定の正確さは関数本体に責任がある』点。`return true` を返すだけで「これは string です」と宣言できてしまうので、ユーザー定義型ガードはランタイム検証のロジックと型シグネチャを同時に書く責務をプログラマに負わせます。Zod 等のスキーマ検証ライブラリと組み合わせれば、ランタイム検証と型ガードを両方同時に成り立たせられます。",
+      "code": {
+        "lang": "ts",
+        "src": "function isString(x: unknown): x is string {\n  return typeof x === 'string'\n}\n\nfunction useUnknown(v: unknown) {\n  if (isString(v)) v.toUpperCase() // v: string\n}\n\n// Zod を組み合わせるパターン\nimport { z } from 'zod'\nconst User = z.object({ id: z.string(), name: z.string() })\ntype User = z.infer<typeof User>\n\nfunction isUser(x: unknown): x is User {\n  return User.safeParse(x).success\n}"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Using type predicates",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates"
+        }
+      ]
+    },
+    {
+      "heading": "never で網羅性チェック",
+      "body": "判別可能ユニオンを処理する関数を書くとき、すべてのケースを潰したことを **コンパイル時に保証** したいなら、最後に `never` 型を介すアサーションを置きます。新しいバリアントが追加された瞬間に型エラーで気付ける、安全網になるパターンです。\n\nReducer・switch 文・ステートマシン処理など、ケース追加時の更新漏れが命取りな箇所では強く推奨されます。",
+      "code": {
+        "lang": "ts",
+        "src": "type Shape =\n  | { kind: 'circle'; r: number }\n  | { kind: 'square'; s: number }\n\nfunction area(s: Shape): number {\n  switch (s.kind) {\n    case 'circle': return Math.PI * s.r ** 2\n    case 'square': return s.s ** 2\n    default:\n      const _exhaustive: never = s // ← 新しい kind を足すとここで型エラー\n      return _exhaustive\n  }\n}"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Exhaustiveness checking",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#exhaustiveness-checking"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで `v.toUpperCase()` の直前で v の型は？",
+      "code": {
+        "lang": "ts",
+        "src": "function f(v: string | number | null) {\n  if (typeof v !== 'string') return\n  v.toUpperCase()\n}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "string",
+          "isCorrect": true,
+          "explanation": "正解。typeof v !== 'string' のとき return で抜けるので、以降は v: string に絞られる。"
+        },
+        {
+          "id": "b",
+          "label": "string | number",
+          "isCorrect": false,
+          "explanation": "number と null の両方が return で除外されている。"
+        },
+        {
+          "id": "c",
+          "label": "string | null",
+          "isCorrect": false,
+          "explanation": "null は typeof !== 'string' の側で除外される。"
+        },
+        {
+          "id": "d",
+          "label": "any",
+          "isCorrect": false,
+          "explanation": "ナローイングは any には落ちない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Narrowing",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードはコンパイルできる？できないなら理由は？",
+      "code": {
+        "lang": "ts",
+        "src": "type Shape =\n  | { kind: 'circle'; r: number }\n  | { kind: 'square'; s: number }\n  | { kind: 'rect'; w: number; h: number } // ← 後から追加\n\nfunction area(s: Shape): number {\n  switch (s.kind) {\n    case 'circle': return Math.PI * s.r ** 2\n    case 'square': return s.s ** 2\n    default:\n      const _e: never = s\n      return _e\n  }\n}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "コンパイルできる（default は到達しないので問題なし）",
+          "isCorrect": false,
+          "explanation": "rect が処理されないので default で s は { kind: 'rect'; ... } になり、never に代入できない。"
+        },
+        {
+          "id": "b",
+          "label": "コンパイルできない（s が { kind: 'rect'; ... } として残り、never に代入できないため）",
+          "isCorrect": true,
+          "explanation": "正解。網羅性チェックの典型挙動。新しいバリアント追加時に default 節で型エラーが出るので、case 追加忘れを検出できる。"
+        },
+        {
+          "id": "c",
+          "label": "コンパイルできない（switch 文に default を書いてはいけない）",
+          "isCorrect": false,
+          "explanation": "default 自体は OK。"
+        },
+        {
+          "id": "d",
+          "label": "型エラーは出ないが実行時に throw する",
+          "isCorrect": false,
+          "explanation": "コンパイル時にエラーが出る。実行に届かない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Exhaustiveness checking",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#exhaustiveness-checking"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "外部 API のレスポンス（unknown）を型安全に扱いたい。最も適切な方針は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "Zod 等で safeParse → success なら型が絞られて以降は型付きで扱う",
+          "isCorrect": true,
+          "explanation": "正解。ランタイム検証と型ナローイングを同時に満たす定石。外部入力に型アノテーションだけ付けるのは嘘になる。"
+        },
+        {
+          "id": "b",
+          "label": "any にキャストして直接プロパティアクセス",
+          "isCorrect": false,
+          "explanation": "型安全性が完全に失われ、実行時クラッシュの温床。"
+        },
+        {
+          "id": "c",
+          "label": "as User でアサーションして使う",
+          "isCorrect": false,
+          "explanation": "型アサーションは検証していない。実体が違えば実行時エラー。"
+        },
+        {
+          "id": "d",
+          "label": "in 演算子で 1 つずつフィールドの有無を確認",
+          "isCorrect": false,
+          "explanation": "フィールド型（数値か文字列か等）の検証ができない。スキーマライブラリのほうが堅い。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Zod — Basic usage",
+          "url": "https://zod.dev/?id=basic-usage"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードでバグになっている理由として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "function isUser(x: unknown): x is { name: string } {\n  return true\n}\n\nconst v: unknown = 42\nif (isUser(v)) v.name.toUpperCase()"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "isUser の実装が判定をしていないため、v が { name: string } でないときに実行時エラーになる",
+          "isCorrect": true,
+          "explanation": "正解。ユーザー定義型ガードはシグネチャと実装の責任がプログラマにある。`return true` だけだと TypeScript は信じてしまい、実体が違っても型としては絞られてしまう。"
+        },
+        {
+          "id": "b",
+          "label": "TypeScript は実装内容を解析して矛盾を検出するので、これはコンパイルエラーになる",
+          "isCorrect": false,
+          "explanation": "TypeScript はユーザー定義型ガードの実装の正しさを検証しない。"
+        },
+        {
+          "id": "c",
+          "label": "unknown 型の変数には型ガードを適用できないので意味がない",
+          "isCorrect": false,
+          "explanation": "unknown にも型ガードは適用できる。これが定石。"
+        },
+        {
+          "id": "d",
+          "label": "x is { name: string } という構文は TypeScript には存在しない",
+          "isCorrect": false,
+          "explanation": "存在する。ユーザー定義型ガードの戻り型構文。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Using type predicates",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "typeof / instanceof / in / Array.isArray / リテラル比較 が基本のナローイング",
+      "判別可能ユニオンは『タグフィールドでの比較』で型を絞る最も読みやすい設計",
+      "x is T の戻り値型でユーザー定義型ガードを作れる。ただし実装の正しさはプログラマ責任",
+      "switch + never で網羅性チェック。新ケース追加忘れを型エラーで検出する"
+    ],
+    "furtherReading": [
+      {
+        "title": "TypeScript — Narrowing (Handbook)",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+      }
+    ]
+  }
+}

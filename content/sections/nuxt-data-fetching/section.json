@@ -1,0 +1,13 @@
+{
+  "id": "nuxt-data-fetching",
+  "title": "Nuxt データフェッチとレンダリング",
+  "description": "useFetch と useAsyncData の使い分け、SSR / CSR / SSG レンダリングモード、payload の受け渡し、route middleware、server/api ルートを扱う。",
+  "order": 2,
+  "lessons": [
+    "01-useFetch-vs-useAsyncData",
+    "02-ssr-csr-ssg",
+    "03-payload-and-hydration",
+    "04-route-middleware",
+    "05-server-api-routes"
+  ]
+}

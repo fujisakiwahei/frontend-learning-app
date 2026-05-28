@@ -1,0 +1,13 @@
+{
+  "id": "accessibility",
+  "title": "アクセシビリティの基礎",
+  "description": "セマンティック HTML、キーボード操作、ARIA、コントラスト、フォームのラベリング。WAI-ARIA Authoring Practices と MDN を一次ソースに、最初に身につけるべき判断軸を扱う。",
+  "order": 6,
+  "lessons": [
+    "01-semantic-html",
+    "02-keyboard-nav",
+    "03-aria-attributes",
+    "04-contrast-and-text",
+    "05-form-labels"
+  ]
+}

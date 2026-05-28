@@ -1,0 +1,13 @@
+{
+  "id": "typescript-type-reading",
+  "title": "TypeScript 型推論の読解",
+  "description": "型ガードとナローイング、ジェネリクス、ユーティリティ型、条件型と infer、テンプレートリテラル型を、読んで意味が取れる力にする。",
+  "order": 3,
+  "lessons": [
+    "01-narrowing",
+    "02-generics",
+    "03-utility-types",
+    "04-conditional-types",
+    "05-template-literal-types"
+  ]
+}

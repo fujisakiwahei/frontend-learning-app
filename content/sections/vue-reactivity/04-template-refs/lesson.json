@@ -1,0 +1,262 @@
+{
+  "id": "vue-reactivity.template-refs",
+  "version": 1,
+  "title": "テンプレート refs（DOM 参照）と useTemplateRef",
+  "estimatedMinutes": 6,
+  "tags": ["vue3", "template-refs", "dom"],
+  "prerequisites": ["vue-reactivity.lifecycle"],
+
+  "intro": {
+    "headline": "DOM に直接触りたいときの正規ルート",
+    "body": "「input にフォーカスする」「子コンポーネントのメソッドを呼ぶ」「スクロール位置を読む」など、Vue の宣言的な仕組みだけでは届かない DOM 操作にはテンプレート refs を使います。`ref` 属性に名前を付け、`useTemplateRef('name')`（Vue 3.5+）または同名の `ref` を `<script setup>` で宣言することで、マウント後に DOM ノード／コンポーネントインスタンスが取得できます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "useTemplateRef（推奨）の基本",
+      "body": "Vue 3.5 で追加された `useTemplateRef('refName')` はテンプレート内の `ref=\"refName\"` を受け取るための専用 API です。マウント前は `null`、マウント後に DOM 要素（コンポーネントの場合はそのインスタンス）が入ります。\n\n3.5 未満では「同名の ref を宣言する」古い書き方を使いますが、新規コードでは useTemplateRef が読みやすく、文字列キー / 型推論 / リアクティブ更新の振る舞いが明確で推奨されます。",
+      "code": {
+        "lang": "vue",
+        "src": "<script setup lang=\"ts\">\nimport { useTemplateRef, onMounted } from 'vue'\n\nconst input = useTemplateRef<HTMLInputElement>('input')\n\nonMounted(() => {\n  input.value?.focus()\n})\n</script>\n\n<template>\n  <input ref=\"input\" />\n</template>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Template Refs",
+          "url": "https://vuejs.org/guide/essentials/template-refs.html"
+        },
+        {
+          "title": "Vue.js — useTemplateRef()",
+          "url": "https://vuejs.org/api/composition-api-helpers.html#usetemplateref"
+        }
+      ]
+    },
+    {
+      "heading": "ref の取得タイミングはマウント後",
+      "body": "テンプレート ref は「コンポーネントがマウントされた後」で初めて値が入ります。`setup` の同期スコープではまだ DOM が無いため `null` のままです。アクセスする場所は `onMounted` の内側か、それ以降に走る watch / イベントハンドラ等に限定するのが基本です。\n\nまた、`v-if=\"false\"` 等で描画されていないと ref は `null` のまま。条件付き要素を扱うときはアクセス前のオプショナルチェイン（`input.value?.focus()`）が安全です。",
+      "code": {
+        "lang": "ts",
+        "src": "<script setup lang=\"ts\">\nimport { useTemplateRef, onMounted } from 'vue'\n\nconst el = useTemplateRef<HTMLDivElement>('el')\n\n// ❌ setup 本体では null\nconsole.log(el.value) // null\n\nonMounted(() => {\n  // ✅ ここなら DOM がある\n  console.log(el.value) // <div>...</div>\n})\n</script>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Template Refs — Accessing the Refs",
+          "url": "https://vuejs.org/guide/essentials/template-refs.html#accessing-the-refs"
+        }
+      ]
+    },
+    {
+      "heading": "コンポーネントの ref と defineExpose",
+      "body": "子コンポーネントに `ref` を付けると、デフォルト（`<script setup>` 使用時）では外側からはほぼ何も見えません。`<script setup>` は内部状態を非公開にする方針なので、親に公開したいプロパティ／メソッドは `defineExpose({...})` で明示的に列挙する必要があります。\n\nこのため「親から子のメソッドを呼ぶ」設計は便利な反面、コンポーネントの境界をぼかすので、必要最小限の公開にとどめます。状態の同期は props / emit で済むことが多く、ref + 命令的 API は「フォーカス制御」「ダイアログ open」など命令型の意図が強い場面に絞るのが定石です。",
+      "code": {
+        "lang": "vue",
+        "src": "<!-- Child.vue -->\n<script setup lang=\"ts\">\nimport { ref } from 'vue'\nconst open = ref(false)\nfunction show() { open.value = true }\ndefineExpose({ show })\n</script>\n\n<!-- Parent.vue -->\n<script setup lang=\"ts\">\nimport { useTemplateRef, onMounted } from 'vue'\nimport Child from './Child.vue'\nconst child = useTemplateRef<InstanceType<typeof Child>>('child')\nonMounted(() => child.value?.show())\n</script>\n\n<template>\n  <Child ref=\"child\" />\n</template>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Template Refs on Component",
+          "url": "https://vuejs.org/guide/essentials/template-refs.html#ref-on-component"
+        },
+        {
+          "title": "Vue.js — defineExpose()",
+          "url": "https://vuejs.org/api/sfc-script-setup.html#defineexpose"
+        }
+      ]
+    },
+    {
+      "heading": "v-for の中の ref は配列になる",
+      "body": "`v-for` で繰り返す要素に同じ `ref` 名を付けると、その ref は **配列** になります。順序はテンプレート上の DOM 順と一致しますが、`v-for` のキーや追加削除で並びが変わると ref 配列の中身も更新されます。\n\n反応的な並べ替えを扱うときは「ref が配列になる」点を忘れがちで、`el.value.focus()` を書いたつもりが `el.value[0]?.focus()` でないと動かない、というのが頻出の罠です。",
+      "code": {
+        "lang": "vue",
+        "src": "<script setup lang=\"ts\">\nimport { useTemplateRef, onMounted } from 'vue'\nconst items = useTemplateRef<HTMLLIElement[]>('items')\nonMounted(() => {\n  console.log(items.value?.length) // 3\n})\n</script>\n\n<template>\n  <ul>\n    <li v-for=\"n in 3\" :key=\"n\" ref=\"items\">{{ n }}</li>\n  </ul>\n</template>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Refs inside v-for",
+          "url": "https://vuejs.org/guide/essentials/template-refs.html#refs-inside-v-for"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで onMounted 内の console.log は何を出す？",
+      "code": {
+        "lang": "vue",
+        "src": "<script setup lang=\"ts\">\nimport { useTemplateRef, onMounted } from 'vue'\nconst el = useTemplateRef<HTMLDivElement>('el')\nconsole.log('a', el.value)\nonMounted(() => console.log('b', el.value))\n</script>\n\n<template><div ref=\"el\">x</div></template>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "'a' <div> / 'b' <div>",
+          "isCorrect": false,
+          "explanation": "setup 本体では DOM が存在しないので 'a' のときは null。"
+        },
+        {
+          "id": "b",
+          "label": "'a' null / 'b' <div>",
+          "isCorrect": true,
+          "explanation": "正解。setup の同期実行時はマウント前で null。onMounted の時点で初めて DOM が入る。"
+        },
+        {
+          "id": "c",
+          "label": "'a' null / 'b' null",
+          "isCorrect": false,
+          "explanation": "onMounted は DOM 挿入後に走るので、ref には要素が入っているはず。"
+        },
+        {
+          "id": "d",
+          "label": "実行時エラー（useTemplateRef は名前が一致しないと throw する）",
+          "isCorrect": false,
+          "explanation": "名前が一致しなければ ref は単に null のまま。throw はしない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Template Refs — Accessing the Refs",
+          "url": "https://vuejs.org/guide/essentials/template-refs.html#accessing-the-refs"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで親から子の greet() を呼びたい。期待通り動かない理由として正しいのは？",
+      "code": {
+        "lang": "vue",
+        "src": "<!-- Child.vue -->\n<script setup lang=\"ts\">\nfunction greet() { alert('hi') }\n</script>\n\n<!-- Parent.vue -->\n<script setup lang=\"ts\">\nimport { useTemplateRef, onMounted } from 'vue'\nimport Child from './Child.vue'\nconst child = useTemplateRef<InstanceType<typeof Child>>('child')\nonMounted(() => (child.value as any)?.greet())\n</script>\n\n<template><Child ref=\"child\" /></template>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "Vue は子のメソッドを親から呼ぶことを禁止している",
+          "isCorrect": false,
+          "explanation": "禁止はしていない。明示的な公開が必要なだけ。"
+        },
+        {
+          "id": "b",
+          "label": "<script setup> は内部状態を既定で非公開にするため、defineExpose({ greet }) で公開が必要",
+          "isCorrect": true,
+          "explanation": "正解。<script setup> はカプセル化を強める。親に渡したい API は defineExpose で列挙する。"
+        },
+        {
+          "id": "c",
+          "label": "useTemplateRef はコンポーネントには使えず、HTMLElement 専用である",
+          "isCorrect": false,
+          "explanation": "useTemplateRef はコンポーネントの公開インスタンスも受け取れる。"
+        },
+        {
+          "id": "d",
+          "label": "ref 属性は子コンポーネントには付けられない",
+          "isCorrect": false,
+          "explanation": "コンポーネントにも ref を付けられる。値はその公開インスタンスになる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — defineExpose()",
+          "url": "https://vuejs.org/api/sfc-script-setup.html#defineexpose"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "「ページ読み込み直後に検索ボックスへフォーカスを当てたい」。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "useTemplateRef で input を取り、onMounted で input.value?.focus()",
+          "isCorrect": true,
+          "explanation": "正解。マウント後の DOM 操作の典型パターン。SSR でも安全で、Vue の宣言的モデルからの逸脱も最小。"
+        },
+        {
+          "id": "b",
+          "label": "<input ref=\"el\" /> として setup 本体で document.querySelector('input').focus()",
+          "isCorrect": false,
+          "explanation": "setup 本体は DOM 前 & SSR でもサーバ側で走る。document アクセスでクラッシュする。"
+        },
+        {
+          "id": "c",
+          "label": "autofocus 属性を付ける",
+          "isCorrect": false,
+          "explanation": "autofocus は HTML 標準だがハイドレーション直後のフォーカス挙動はブラウザ差・SPA との相性で予測しづらく、アクセシビリティ的にも常用は非推奨。"
+        },
+        {
+          "id": "d",
+          "label": "v-focus というカスタムディレクティブを毎回書く",
+          "isCorrect": false,
+          "explanation": "1 箇所の要件のために独自ディレクティブを増やすのは過剰。useTemplateRef + onMounted で十分。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — useTemplateRef()",
+          "url": "https://vuejs.org/api/composition-api-helpers.html#usetemplateref"
+        },
+        {
+          "title": "MDN — autofocus considerations",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/autofocus"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "v-for で 3 件の <li> に ref=\"items\" を付けた。const items = useTemplateRef('items') の型として最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "Ref<HTMLLIElement | null>",
+          "isCorrect": false,
+          "explanation": "v-for の同名 ref は配列になる。単一要素型では不適切。"
+        },
+        {
+          "id": "b",
+          "label": "Ref<HTMLLIElement[]>",
+          "isCorrect": true,
+          "explanation": "正解。v-for の中で同じ ref 名を持つ要素は配列としてまとめられる。"
+        },
+        {
+          "id": "c",
+          "label": "Ref<Record<number, HTMLLIElement>>",
+          "isCorrect": false,
+          "explanation": "オブジェクトではなく配列。"
+        },
+        {
+          "id": "d",
+          "label": "Ref<NodeListOf<HTMLLIElement>>",
+          "isCorrect": false,
+          "explanation": "Vue は NodeList ではなく素の配列を返す。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Refs inside v-for",
+          "url": "https://vuejs.org/guide/essentials/template-refs.html#refs-inside-v-for"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "DOM 直接操作には useTemplateRef（Vue 3.5+）。値はマウント後に入る、それまでは null",
+      "<script setup> の子コンポーネントは defineExpose で明示公開しない限り親から触れない",
+      "v-for 内の同名 ref は配列になる。インデックスでアクセスする",
+      "命令的 DOM 操作はフォーカス／ダイアログ／3rd party 統合など、宣言的に書けない場面に限定する"
+    ],
+    "furtherReading": [
+      {
+        "title": "Vue.js — Template Refs",
+        "url": "https://vuejs.org/guide/essentials/template-refs.html"
+      },
+      {
+        "title": "Vue.js — defineExpose()",
+        "url": "https://vuejs.org/api/sfc-script-setup.html#defineexpose"
+      }
+    ]
+  }
+}

@@ -1,0 +1,254 @@
+{
+  "id": "typescript-type-reading.template-literal-types",
+  "version": 1,
+  "title": "テンプレートリテラル型",
+  "estimatedMinutes": 6,
+  "tags": ["typescript", "template-literal-types"],
+  "prerequisites": ["typescript-type-reading.utility-types"],
+
+  "intro": {
+    "headline": "型の世界でも文字列が組み立てられる",
+    "body": "TypeScript 4.1 以降では文字列のテンプレートリテラルが『型』としても使えます。`type Event = `on${'Click' | 'Hover'}`` のように書くと `'onClick' | 'onHover'` という型が生成されます。`Uppercase` / `Lowercase` / `Capitalize` / `Uncapitalize` といった組み込みの組合せで、API のキー命名・CSS 変数名・イベント名などを型レベルで安全に扱えます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "基本: ユニオンを組み合わせる",
+      "body": "テンプレートリテラル型はユニオン型と組み合わせて『全組合せ』を生成します。`'/users/' | '/posts/' | ...` のような可能性が爆発するときは中間エイリアスで段階分けすると読みやすくなります。\n\n型レベルで作った文字列は、値としても型と一致したリテラルに限定して受け取らせるのに使えます。たとえば `type EventName = `on${Capitalize<'click'|'hover'>}`` から `'onClick' | 'onHover'` が生成されます。",
+      "code": {
+        "lang": "ts",
+        "src": "type Lang = 'en' | 'ja'\ntype Route = `/lang/${Lang}`           // '/lang/en' | '/lang/ja'\n\ntype Cap<T extends string> = `on${Capitalize<T>}`\ntype E = Cap<'click' | 'hover'>        // 'onClick' | 'onHover'"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Template Literal Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html"
+        }
+      ]
+    },
+    {
+      "heading": "組み込み: Uppercase / Lowercase / Capitalize",
+      "body": "TypeScript には文字列ケース変換のための組み込み型があります。\n\n- `Uppercase<S>`: 全大文字\n- `Lowercase<S>`: 全小文字\n- `Capitalize<S>`: 先頭だけ大文字\n- `Uncapitalize<S>`: 先頭だけ小文字\n\nReact / Vue の prop 名（onClick 等）の生成、CSS カスタムプロパティの正規化、API パスの組み立てなどに使われます。",
+      "code": {
+        "lang": "ts",
+        "src": "type Hello = Uppercase<'hello'>     // 'HELLO'\ntype CssVar<K extends string> = `--${Lowercase<K>}`\n\ntype V = CssVar<'BG_PRIMARY'>       // '--bg_primary'"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Intrinsic String Manipulation Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html#intrinsic-string-manipulation-types"
+        }
+      ]
+    },
+    {
+      "heading": "infer と組み合わせてパース",
+      "body": "条件型と `infer` を組み合わせると、文字列リテラル型から部分文字列を取り出せます。たとえば `/users/:id/posts/:postId` のような URL パターンから、パラメータ名のユニオンを抽出する型が書けます。\n\nこれは実装としては高度ですが、ライブラリ（hono の型付きルート、tRPC の path 推論など）で広く使われており、コードリーディングで遭遇する頻度が高くなっています。",
+      "code": {
+        "lang": "ts",
+        "src": "type ExtractParams<P extends string> =\n  P extends `${string}:${infer Param}/${infer Rest}`\n    ? Param | ExtractParams<`/${Rest}`>\n  : P extends `${string}:${infer Param}`\n    ? Param\n  : never\n\ntype P = ExtractParams<'/users/:id/posts/:postId'>\n// 'id' | 'postId'"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Template Literal Types and infer",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html"
+        }
+      ]
+    },
+    {
+      "heading": "やりすぎ注意 — 読みやすさとのトレードオフ",
+      "body": "テンプレートリテラル型は強力ですが、組合せ爆発で型推論が遅くなったり、エラーメッセージが読みづらくなったりします。実務では『公開 API の型』『リファクタで頻繁にミスを生む箇所』に投資して、内部実装には素直な型を使うのが現実的です。\n\nまた、JS のテンプレートリテラルと違って **型レベルで条件分岐や繰り返しを書くのはあくまで型情報を高めるため** で、ランタイムには影響しません。実行時の文字列処理と混同しないように分けて読みます。",
+      "code": {
+        "lang": "ts",
+        "src": "// やりすぎの例: 5 ユニオン x 4 ユニオン x ... で組合せ爆発\ntype Class = `${'btn'|'card'}-${'primary'|'success'|'error'|'warning'}-${'sm'|'md'|'lg'}`\n// 24 通りの文字列リテラル型を持つ — エディタが重くなる場合がある"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Performance Wiki",
+          "url": "https://github.com/microsoft/TypeScript/wiki/Performance"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `T` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "type T = `${Uppercase<'a' | 'b'>}_${'x' | 'y'}`"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "'A_x' | 'A_y' | 'B_x' | 'B_y'",
+          "isCorrect": true,
+          "explanation": "正解。テンプレートリテラル型はユニオンの全組合せを生成する。"
+        },
+        {
+          "id": "b",
+          "label": "'A_x' | 'B_y'",
+          "isCorrect": false,
+          "explanation": "対応付けではなく直交組み合わせになる。"
+        },
+        {
+          "id": "c",
+          "label": "string",
+          "isCorrect": false,
+          "explanation": "リテラル型のユニオンに絞られる。"
+        },
+        {
+          "id": "d",
+          "label": "'a_x' | 'a_y' | 'b_x' | 'b_y'",
+          "isCorrect": false,
+          "explanation": "Uppercase で 'A' / 'B' に変換される。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Intrinsic String Manipulation Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html#intrinsic-string-manipulation-types"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `R` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "type RouteParams<P> =\n  P extends `${string}:${infer K}/${infer Rest}`\n    ? K | RouteParams<`/${Rest}`>\n    : P extends `${string}:${infer K}` ? K : never\n\ntype R = RouteParams<'/a/:foo/b/:bar/c'>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "'foo'",
+          "isCorrect": false,
+          "explanation": "再帰しているので :bar も取り出される。"
+        },
+        {
+          "id": "b",
+          "label": "'foo' | 'bar'",
+          "isCorrect": true,
+          "explanation": "正解。再帰的なテンプレート + infer で全パラメータ名を抽出している。"
+        },
+        {
+          "id": "c",
+          "label": "string",
+          "isCorrect": false,
+          "explanation": "リテラル型のユニオンが取れる。"
+        },
+        {
+          "id": "d",
+          "label": "never",
+          "isCorrect": false,
+          "explanation": "パターンに一致するので true 側に分岐する。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Template Literal Types — Pattern Inference",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "イベントハンドラ Props を `onEventName` 形式で型安全に生成したい。最も適切な書き方は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "type Handlers<E extends string> = { [K in E as `on${Capitalize<K>}`]: () => void }",
+          "isCorrect": true,
+          "explanation": "正解。mapped types + テンプレートリテラルで E の各キーを onXxx 形式の関数プロパティに変換できる。実務で React / Vue の props の型生成に近い。"
+        },
+        {
+          "id": "b",
+          "label": "type Handlers = { [k: string]: () => void }",
+          "isCorrect": false,
+          "explanation": "命名規則がないため `onClick` 以外の文字列も通る。型安全性が低い。"
+        },
+        {
+          "id": "c",
+          "label": "type Handlers = { onClick: () => void }（毎回べた書き）",
+          "isCorrect": false,
+          "explanation": "イベントが増えるたびに重複が出る。型変換の意味が薄い。"
+        },
+        {
+          "id": "d",
+          "label": "type Handlers<E> = Record<E, () => void>",
+          "isCorrect": false,
+          "explanation": "キー名が onCapitalize される変換が無い。仕様と合わない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Key Remapping in Mapped Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/mapped-types.html#key-remapping-via-as"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次の型 `V` として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "type CssVar<K extends string> = `--${Lowercase<K>}`\ntype V = CssVar<'PRIMARY' | 'Accent'>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "'--primary' | '--accent'",
+          "isCorrect": true,
+          "explanation": "正解。Lowercase でユニオンの各要素が小文字化され、それぞれに '--' プレフィックスが付く。"
+        },
+        {
+          "id": "b",
+          "label": "'--PRIMARY' | '--Accent'",
+          "isCorrect": false,
+          "explanation": "Lowercase が効くので大文字は残らない。"
+        },
+        {
+          "id": "c",
+          "label": "string",
+          "isCorrect": false,
+          "explanation": "リテラル型のユニオンに絞られる。"
+        },
+        {
+          "id": "d",
+          "label": "'--PRIMARY' | '--accent'",
+          "isCorrect": false,
+          "explanation": "両方とも小文字化される。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Template Literal Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "テンプレートリテラル型はユニオンと組み合わせると全組合せを生成する",
+      "Uppercase / Lowercase / Capitalize / Uncapitalize で命名規則を型レベルで強制できる",
+      "infer + 再帰でリテラル文字列をパースして部分を取り出せる",
+      "組合せ爆発で型推論が遅くなる場合がある。公開 API の型に投資し、内部は素直に書く"
+    ],
+    "furtherReading": [
+      {
+        "title": "TypeScript — Template Literal Types",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html"
+      },
+      {
+        "title": "TypeScript — Mapped Types",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/mapped-types.html"
+      }
+    ]
+  }
+}

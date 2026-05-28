@@ -1,0 +1,258 @@
+{
+  "id": "nuxt-data-fetching.useFetch-vs-useAsyncData",
+  "version": 1,
+  "title": "useFetch と useAsyncData の使い分け",
+  "estimatedMinutes": 7,
+  "tags": ["nuxt", "data-fetching"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "「URL を叩く」か「任意の非同期を実行する」か",
+    "body": "Nuxt 3 / 4 のデータ取得 API には主に 4 つあります：`useFetch` / `useAsyncData` / `$fetch` / `useLazyFetch`。雑に言うと **URL を叩くなら useFetch、任意の非同期処理を SSR 対応付きで包みたいなら useAsyncData、コンポーネント外（イベントハンドラ等）で叩くだけなら $fetch** です。重要なのは「サーバで実行された結果を payload に乗せてクライアントへ運ぶ」のは useFetch / useAsyncData だけ、という点です。"
+  },
+
+  "explanations": [
+    {
+      "heading": "$fetch は素の HTTP クライアント",
+      "body": "`$fetch` はサーバ／クライアントどちらでも使える ofetch ベースの HTTP クライアントです。`await $fetch('/api/x')` のように直接呼ぶと URL を叩いてデータを返します。ただし **SSR で呼んでもその結果をクライアントへ受け渡す仕組みは持ちません**。setup 直下で `await $fetch` をすると、サーバとクライアントの両方で同じリクエストが走り、ネットワークが二重になります。\n\n用途は「ボタンクリックで送信する POST」「コンポーネント外のイベントハンドラからの呼び出し」「server/api 同士の内部呼び出し」など、ライフサイクル管理を Vue に任せない場面に絞ります。",
+      "code": {
+        "lang": "ts",
+        "src": "// ✅ イベントハンドラからの呼び出し\nasync function submit() {\n  await $fetch('/api/save', { method: 'POST', body: form.value })\n}\n\n// ❌ setup 本体での直接呼び出し（SSR とクライアントで二重実行）\n// const data = await $fetch('/api/users')"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — $fetch",
+          "url": "https://nuxt.com/docs/getting-started/data-fetching#fetch"
+        }
+      ]
+    },
+    {
+      "heading": "useFetch = useAsyncData + $fetch のラッパ",
+      "body": "`useFetch(url)` は内部で `useAsyncData(key, () => $fetch(url))` を呼んでいるショートカットです。`url` を渡すだけで自動的にキーが生成され、SSR で取得した結果はハイドレーション時にクライアントへ受け渡されます。クライアントでは payload を使い回すため、再リクエストは発生しません。\n\nリアクティブな URL（`computed` や `() => ref` を渡す形）を使うと、依存が変わったときに自動的に再フェッチします。最も短く・安全に書けるのが useFetch なので、まずはこれを使えるかから検討します。",
+      "code": {
+        "lang": "ts",
+        "src": "const id = ref(1)\nconst { data, error, pending, refresh } = await useFetch(() => `/api/users/${id.value}`)\n// id.value を 2 にすると自動で再フェッチ"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — useFetch",
+          "url": "https://nuxt.com/docs/api/composables/use-fetch"
+        }
+      ]
+    },
+    {
+      "heading": "useAsyncData は任意の非同期を SSR 対応で包む",
+      "body": "URL を叩く以外の非同期処理（DB 直接アクセス、ユーティリティ関数、複数 fetch を組み合わせた集計など）を SSR 対応の枠組みに乗せたいときは `useAsyncData(key, asyncFn)` を使います。第 1 引数の `key` はクライアントが payload を引き当てるための識別子で、ユニークである必要があります。\n\nuseFetch は内部的にこの key を URL から自動生成しています。useAsyncData を使う場合は手動で衝突しないキーを付けます。",
+      "code": {
+        "lang": "ts",
+        "src": "const { data } = await useAsyncData('top-products', async () => {\n  const [products, ratings] = await Promise.all([\n    $fetch('/api/products?top=10'),\n    $fetch('/api/ratings/summary'),\n  ])\n  return { products, ratings }\n})"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — useAsyncData",
+          "url": "https://nuxt.com/docs/api/composables/use-async-data"
+        }
+      ]
+    },
+    {
+      "heading": "lazy / server オプションで実行タイミングを調整",
+      "body": "useFetch / useAsyncData の主要オプション：\n\n- `lazy: true`（または `useLazyFetch`）: 初期表示をブロックしない。先にレンダーを返し、pending を表示してデータ到着後に差し替える\n- `server: false`: サーバではフェッチしない。クライアント側のみで実行する（個人ダッシュボード等、SSR で取得する意味が薄い場合）\n- `transform: (raw) => normalized`: 取得直後にデータを整形する\n- `default: () => initial`: data の初期値\n- `watch: [...]` / `watch: false`: 依存の自動追跡を制御する\n\n初期表示の速さ重視なら lazy、クライアント固有データなら server: false、と憶えると選びやすくなります。",
+      "code": {
+        "lang": "ts",
+        "src": "// 初期表示はすぐ返し、データはあとから\nconst { data, pending } = useLazyFetch('/api/heavy')\n\n// クライアントだけで取りたい\nconst { data: me } = await useFetch('/api/me', { server: false })"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — useFetch Options",
+          "url": "https://nuxt.com/docs/api/composables/use-fetch#params"
+        },
+        {
+          "title": "Nuxt — useLazyFetch",
+          "url": "https://nuxt.com/docs/api/composables/use-lazy-fetch"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードを setup 直下で書いた。SSR ではどのように動く？",
+      "code": {
+        "lang": "ts",
+        "src": "<script setup lang=\"ts\">\nconst data = await $fetch('/api/users')\n</script>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "サーバで 1 回、クライアントでも 1 回フェッチが走る（合計 2 回）",
+          "isCorrect": true,
+          "explanation": "正解。$fetch は payload に乗らないため、サーバの結果はクライアントに引き継がれない。setup 本体はサーバ/クライアント両方で走るので、結果として同じリクエストが二重に発生する。"
+        },
+        {
+          "id": "b",
+          "label": "サーバでだけ走り、結果は payload でクライアントに渡される",
+          "isCorrect": false,
+          "explanation": "payload に乗せるのは useFetch / useAsyncData の仕事。$fetch 単体ではその仕組みは無い。"
+        },
+        {
+          "id": "c",
+          "label": "クライアントでだけ走る（SSR では実行されない）",
+          "isCorrect": false,
+          "explanation": "$fetch は SSR 環境でも普通に実行される。Node 実行時に Node の fetch を経由して走る。"
+        },
+        {
+          "id": "d",
+          "label": "実行時エラーになる",
+          "isCorrect": false,
+          "explanation": "エラーにはならない。挙動として効率が悪いだけ。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Data Fetching — $fetch",
+          "url": "https://nuxt.com/docs/getting-started/data-fetching#fetch"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次の useFetch のうち id を変えたときに自動で再フェッチされるのは？",
+      "code": {
+        "lang": "ts",
+        "src": "const id = ref(1)\n\n// A\nuseFetch(`/api/users/${id.value}`)\n\n// B\nuseFetch(() => `/api/users/${id.value}`)"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "A と B のどちらも自動再フェッチされる",
+          "isCorrect": false,
+          "explanation": "A は文字列を渡しているだけなので依存追跡されない。"
+        },
+        {
+          "id": "b",
+          "label": "B だけが自動再フェッチされる",
+          "isCorrect": true,
+          "explanation": "正解。getter（関数）で渡すことで、内部で読まれた id.value が依存として追跡される。A はその時点の文字列が固定されるので再フェッチされない。"
+        },
+        {
+          "id": "c",
+          "label": "A だけが自動再フェッチされる",
+          "isCorrect": false,
+          "explanation": "逆。getter で渡さない限り依存追跡は発生しない。"
+        },
+        {
+          "id": "d",
+          "label": "どちらも自動再フェッチされず、refresh() の手動呼び出しが必要",
+          "isCorrect": false,
+          "explanation": "B は自動再フェッチされる。getter 渡しが標準的なリアクティブ URL の書き方。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — Reactive Keys / URL in useFetch",
+          "url": "https://nuxt.com/docs/api/composables/use-fetch#params"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "ログインユーザー専用ダッシュボードのデータを取得したい。SSR で取得する意味が薄く、Cookie ベースの認証セッションをそのまま使いたい。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "useFetch('/api/dashboard', { server: false })",
+          "isCorrect": true,
+          "explanation": "正解。サーバで実行しない（クライアント限定）。Cookie はブラウザの fetch がそのまま送るのでセッション扱いも素直。SSR 用 payload を作らないので無駄なサーバ処理も避けられる。"
+        },
+        {
+          "id": "b",
+          "label": "useFetch('/api/dashboard')",
+          "isCorrect": false,
+          "explanation": "既定で SSR でも実行される。SSR 中の fetch は Cookie 等を明示的に転送しないとセッションが落ちることがあり、設計が複雑になる。"
+        },
+        {
+          "id": "c",
+          "label": "onMounted で $fetch を呼ぶ",
+          "isCorrect": false,
+          "explanation": "動くが、useFetch の状態（pending, error, refresh）を自前で再実装することになり冗長。"
+        },
+        {
+          "id": "d",
+          "label": "definePageMeta({ ssr: false }) でページ単位で SSR を切る",
+          "isCorrect": false,
+          "explanation": "ページ全体の SSR を捨てるのはやり過ぎ。データ取得だけクライアント限定にすれば十分。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — useFetch — server option",
+          "url": "https://nuxt.com/docs/api/composables/use-fetch#params"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "「複数 API を Promise.all でまとめてから整形して 1 つの値として返したい。SSR で取った結果はクライアントで再利用したい」。最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "useAsyncData('home', async () => { const [a,b] = await Promise.all([$fetch('/a'), $fetch('/b')]); return merge(a,b) })",
+          "isCorrect": true,
+          "explanation": "正解。useAsyncData は任意の非同期処理を SSR 対応の枠組みに乗せる。サーバの結果は payload に乗ってクライアントへ渡るので二重実行も起きない。"
+        },
+        {
+          "id": "b",
+          "label": "useFetch('/a') と useFetch('/b') を別々に呼んで computed でマージ",
+          "isCorrect": false,
+          "explanation": "動くが、レイテンシが直列になる場面が多く、key も 2 つに分散する。1 つの論理データなら useAsyncData で 1 つにまとめるのが素直。"
+        },
+        {
+          "id": "c",
+          "label": "setup 本体で await $fetch を 2 回呼んで自前で整形",
+          "isCorrect": false,
+          "explanation": "$fetch 直接呼び出しは payload に乗らず、SSR とクライアントで二重実行になる。"
+        },
+        {
+          "id": "d",
+          "label": "Pinia store で onMounted の中で fetch する",
+          "isCorrect": false,
+          "explanation": "SSR で取得できない（onMounted はクライアント限定）。初期表示でデータが無い状態を許容する設計になり要件と合わない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — useAsyncData",
+          "url": "https://nuxt.com/docs/api/composables/use-async-data"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "URL を叩くなら useFetch、任意の非同期を SSR 対応で包むなら useAsyncData、コンポーネント外の単発リクエストは $fetch",
+      "setup 本体での生 $fetch は SSR とクライアントで二重実行になりやすい",
+      "リアクティブ URL は getter（関数）で渡すと依存追跡される",
+      "個人データやクライアント限定は server: false、重い初期表示は lazy オプションで調整"
+    ],
+    "furtherReading": [
+      {
+        "title": "Nuxt — Data Fetching",
+        "url": "https://nuxt.com/docs/getting-started/data-fetching"
+      },
+      {
+        "title": "Nuxt — useFetch",
+        "url": "https://nuxt.com/docs/api/composables/use-fetch"
+      },
+      {
+        "title": "Nuxt — useAsyncData",
+        "url": "https://nuxt.com/docs/api/composables/use-async-data"
+      }
+    ]
+  }
+}

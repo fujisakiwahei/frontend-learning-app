@@ -1,0 +1,250 @@
+{
+  "id": "typescript-type-reading.generics",
+  "version": 1,
+  "title": "ジェネリクスの読み方",
+  "estimatedMinutes": 7,
+  "tags": ["typescript", "generics"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "<T> は『関数の引数』の型版",
+    "body": "ジェネリクスは『型を引数として受け取る型／関数』を定義する仕組みです。`function f<T>(x: T): T` のように書くと、呼び出し側の値から `T` が推論され、入出力の型が連動します。読むときは『どこで T が決まり、どう波及するか』を追えれば内容が掴めます。constraints（`extends`）と default 型を組み合わせれば、より厳密で使いやすい API を設計できます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "基本: 推論される型変数",
+      "body": "`function identity<T>(x: T): T { return x }` を `identity('hello')` と呼ぶと、TypeScript は引数 'hello' のリテラル型から `T = string` を推論し、戻り値も string になります。\n\n配列ユーティリティでも `array.map<R>(fn)` のように戻り値型だけ明示できます。多くの場合は推論に任せて、明示するのは推論が利かない（=型情報の発信源が無い）場面に限ります。",
+      "code": {
+        "lang": "ts",
+        "src": "function first<T>(arr: T[]): T | undefined {\n  return arr[0]\n}\n\nfirst([1, 2, 3])    // T = number, 戻り値: number | undefined\nfirst(['a', 'b'])   // T = string\n\n// 明示\nfirst<number>([])   // T = number に固定"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Generics",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/generics.html"
+        }
+      ]
+    },
+    {
+      "heading": "constraints（extends）で型を絞る",
+      "body": "`<T extends Constraint>` で T が満たすべき制約を指定できます。たとえば `<T extends { id: string }>` と書けば、関数内で `x.id` にアクセスしても型エラーにならず、呼び出し側は id を持たないオブジェクトを渡せなくなります。\n\nよく使う制約：\n\n- `T extends string`: 文字列リテラル型を保ったまま受け取る\n- `T extends keyof O`: あるオブジェクトのキーだけを受け付ける\n- `T extends readonly unknown[]`: 任意のタプル／配列\n\n制約を強く付けるほど API は安全になりますが、過剰にすると呼び出し側で書きづらくなります。",
+      "code": {
+        "lang": "ts",
+        "src": "function byId<T extends { id: string }>(items: T[], id: string): T | undefined {\n  return items.find((i) => i.id === id)\n}\n\nfunction prop<O, K extends keyof O>(o: O, k: K): O[K] {\n  return o[k]\n}\n\nprop({ a: 1, b: 'x' }, 'a') // number\nprop({ a: 1, b: 'x' }, 'b') // string\n// prop({ a: 1 }, 'c')      // 型エラー"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Generic Constraints",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-constraints"
+        }
+      ]
+    },
+    {
+      "heading": "デフォルト型と推論の限界",
+      "body": "型引数にはデフォルト値を持たせられます（`<T = string>`）。呼び出しで型を渡さず、推論もできない（実引数が無い／型情報が落ちる）場合に既定が使われます。\n\nなお『どこからも T が推論できない関数』を書くと、T が `unknown` に潰れたり、呼び出し側で常に明示する羽目になります。型引数は『推論の手がかりがある場所』に置くのが基本で、戻り値だけに出てくる `T` は推論できないので注意します。",
+      "code": {
+        "lang": "ts",
+        "src": "function create<T = string>(value?: T): T {\n  return value as T\n}\n\ncreate()        // T = string（デフォルト）\ncreate(10)      // T = number\ncreate<boolean>() // T = boolean（明示）"
+      },
+      "sources": [
+        {
+          "title": "TypeScript — Default Type Parameters",
+          "url": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-3.html#generic-parameter-defaults"
+        }
+      ]
+    },
+    {
+      "heading": "コンポーネントとコンポーザブルでの活用",
+      "body": "Vue や Nuxt のコンポーザブルでもジェネリクスは頻出します。`useFetch<T>(url)` の `T` は『取得結果の型』を呼び出し側で明示する手段になり、`useState<T>(key, init)` の `T` は『共有状態の型』を指定します。\n\n読むときは『その関数が外から型を受け取る場所はどこか』を意識します。引数で型を持っている関数（`useFetch('/api/x')` の URL）はサーバ側ハンドラの戻り値から逆引き推論される、というように、推論が遠回りに繋がるケースもあります。",
+      "code": {
+        "lang": "ts",
+        "src": "// useState の型指定\nconst me = useState<{ id: string; name: string } | null>('me', () => null)\n\n// 自前のコンポーザブル\nfunction useToggle<T>(initial: T, alt: T) {\n  const v = ref<T>(initial)\n  function toggle() { v.value = v.value === initial ? alt : initial }\n  return { v, toggle }\n}"
+      },
+      "sources": [
+        {
+          "title": "Nuxt — useState",
+          "url": "https://nuxt.com/docs/api/composables/use-state"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで `r` の型は？",
+      "code": {
+        "lang": "ts",
+        "src": "function pick<O, K extends keyof O>(o: O, k: K): O[K] {\n  return o[k]\n}\n\nconst r = pick({ a: 1, b: 'x' as const }, 'b')"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "string",
+          "isCorrect": false,
+          "explanation": "'x' as const なのでリテラル型が保持される。"
+        },
+        {
+          "id": "b",
+          "label": "'x'",
+          "isCorrect": true,
+          "explanation": "正解。as const でリテラル型に固定され、K = 'b' なので O[K] = 'x' になる。"
+        },
+        {
+          "id": "c",
+          "label": "any",
+          "isCorrect": false,
+          "explanation": "K extends keyof O により any に落ちない。"
+        },
+        {
+          "id": "d",
+          "label": "{ a: number; b: 'x' }",
+          "isCorrect": false,
+          "explanation": "K の値を引いて O[K] が返るので、オブジェクト全体にはならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Indexed Access Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/indexed-access-types.html"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで `name` 部分の型は？",
+      "code": {
+        "lang": "ts",
+        "src": "function first<T>(arr: T[]): T | undefined {\n  return arr[0]\n}\n\nconst name = first(['alice', 'bob'])"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "string",
+          "isCorrect": false,
+          "explanation": "戻り値型は T | undefined なので undefined が含まれる。"
+        },
+        {
+          "id": "b",
+          "label": "string | undefined",
+          "isCorrect": true,
+          "explanation": "正解。T = string と推論され、シグネチャに従い undefined も含まれる。"
+        },
+        {
+          "id": "c",
+          "label": "'alice' | 'bob' | undefined",
+          "isCorrect": false,
+          "explanation": "配列リテラルのままだと要素はリテラル型に絞られず string[] になる（as const を付ければ別）。"
+        },
+        {
+          "id": "d",
+          "label": "any",
+          "isCorrect": false,
+          "explanation": "T が推論できているので any にはならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Generics — Working with Generic Type Variables",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/generics.html#working-with-generic-type-variables"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "「リストの要素から id を一致するものを返す」共通関数を作りたい。最も型安全な API は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "function byId<T extends { id: string }>(items: T[], id: string): T | undefined",
+          "isCorrect": true,
+          "explanation": "正解。constraints で『id を持つこと』を要求しつつ、入った T 型をそのまま返す。型情報を失わずに汎用化できる。"
+        },
+        {
+          "id": "b",
+          "label": "function byId(items: any[], id: string): any",
+          "isCorrect": false,
+          "explanation": "any は型安全性が完全に失われる。"
+        },
+        {
+          "id": "c",
+          "label": "function byId(items: { id: string }[], id: string): { id: string } | undefined",
+          "isCorrect": false,
+          "explanation": "戻り値が { id: string } に潰れるため、呼び出し側で他のプロパティを使えなくなる。"
+        },
+        {
+          "id": "d",
+          "label": "function byId<T>(items: T[], id: string): T | undefined",
+          "isCorrect": false,
+          "explanation": "constraints がないので T が id を持つ保証が無い。実装側で i.id にアクセスできない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "TypeScript — Generic Constraints",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-constraints"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで `s` の型として正しいのは？",
+      "code": {
+        "lang": "ts",
+        "src": "const s = useState<{ count: number }>('counter', () => ({ count: 0 }))"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "{ count: number }",
+          "isCorrect": false,
+          "explanation": "useState は Ref を返す。中身ではなく Ref ラッパが必要。"
+        },
+        {
+          "id": "b",
+          "label": "Ref<{ count: number }>",
+          "isCorrect": true,
+          "explanation": "正解。useState<T> は Ref<T> を返す。型引数 T で中身の型を明示している。"
+        },
+        {
+          "id": "c",
+          "label": "ComputedRef<{ count: number }>",
+          "isCorrect": false,
+          "explanation": "computed ではなく useState なので ComputedRef にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "Promise<Ref<{ count: number }>>",
+          "isCorrect": false,
+          "explanation": "useState は同期的に Ref を返す。Promise ではない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Nuxt — useState",
+          "url": "https://nuxt.com/docs/api/composables/use-state"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "ジェネリクスは『型を引数として受け取る』仕組み。呼び出しから推論される",
+      "constraints（extends）で T の最低限の形を指定し、安全性と表現力を両立する",
+      "戻り値だけに現れる T は推論できない。手がかりとなる引数を必ず置く",
+      "useState / useFetch など Nuxt の composable も <T> で取得結果や状態の型を明示できる"
+    ],
+    "furtherReading": [
+      {
+        "title": "TypeScript — Generics (Handbook)",
+        "url": "https://www.typescriptlang.org/docs/handbook/2/generics.html"
+      }
+    ]
+  }
+}

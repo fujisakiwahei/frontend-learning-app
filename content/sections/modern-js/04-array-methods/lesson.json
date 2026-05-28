@@ -1,0 +1,258 @@
+{
+  "id": "modern-js.array-methods",
+  "version": 1,
+  "title": "配列メソッド（map / filter / reduce）",
+  "estimatedMinutes": 6,
+  "tags": ["javascript", "array"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "破壊的か非破壊的か、いつ新しい配列を返すか",
+    "body": "配列メソッドには『新しい配列を返す（非破壊的）』ものと『元の配列を変更する（破壊的）』ものがあります。Vue / React のリアクティブな状態に対しては、破壊的操作で『中身は変わったがコンポーネントが気付かない』ことや、逆に『破壊的操作で再描画されすぎる』ことがあります。さらに toSorted / toReversed といった新しい非破壊版も加わり、選択肢が増えています。"
+  },
+
+  "explanations": [
+    {
+      "heading": "非破壊的: map / filter / slice / concat",
+      "body": "- `map(fn)`: 各要素に fn を適用した **新しい配列** を返す\n- `filter(fn)`: 条件に合う要素だけを集めた **新しい配列** を返す\n- `slice(start, end)`: 範囲をコピーした **新しい配列** を返す\n- `concat(...)`: 連結した **新しい配列** を返す\n\nどれも元の配列は変更しません。Vue / React で props として受けた配列、reactive な配列の派生表示などはこれらを使うのが基本です。",
+      "code": {
+        "lang": "ts",
+        "src": "const xs = [1, 2, 3]\nconst doubled = xs.map(x => x * 2)  // [2,4,6]、xs は [1,2,3] のまま\nconst evens = xs.filter(x => x % 2 === 0)\nconst head = xs.slice(0, 2)         // [1,2]"
+      },
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.map()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map"
+        }
+      ]
+    },
+    {
+      "heading": "破壊的: push / sort / reverse / splice",
+      "body": "- `push(x)` / `pop()` / `shift()` / `unshift(x)`: 元の配列を直接変更\n- `sort(cmp)` / `reverse()`: 元の配列を **その場で** 並べ替え\n- `splice(start, count, ...items)`: 範囲を切り出して **同時に元の配列を変更**\n\n破壊的操作は元の参照を保ったまま中身を更新するため、Vue の reactive 配列ではトラッキング上は反応しますが、props として渡された配列を変えると親のデータを書き換えることになり、データフローを壊します。\n\n非破壊的バージョン（後述）が ES2023 で追加されたので、新規コードではこちらを優先する選択肢が増えました。",
+      "code": {
+        "lang": "ts",
+        "src": "const xs = [3, 1, 2]\nxs.sort()       // xs 自体が [1,2,3] に書き換わる\nxs.push(4)      // xs は [1,2,3,4]\n\n// ❌ Vue で props の配列を直接 sort\n// → 親のデータを書き換えてしまう\n// ✅ コピーしてからソート\nconst sorted = [...xs].sort()"
+      },
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.sort()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort"
+        }
+      ]
+    },
+    {
+      "heading": "ES2023: toSorted / toReversed / toSpliced / with",
+      "body": "破壊的メソッドの非破壊版が ES2023 で標準化されました。すべて **元の配列を変更せず新しい配列を返します**：\n\n- `toSorted(cmp)`: ソート済みコピーを返す\n- `toReversed()`: 逆順コピーを返す\n- `toSpliced(start, count, ...items)`: splice 済みコピーを返す\n- `with(index, value)`: 指定インデックスだけ書き換えたコピーを返す\n\nVue / React / Solid 等の関数型リアクティブモデルと相性が良く、新規コードではこちらを推奨します。",
+      "code": {
+        "lang": "ts",
+        "src": "const xs = [3, 1, 2]\nconst sorted = xs.toSorted()       // [1,2,3]、xs は変わらない\nconst withFirst = xs.with(0, 99)   // [99,1,2]\nconst rev = xs.toReversed()        // [2,1,3]"
+      },
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.toSorted()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/toSorted"
+        },
+        {
+          "title": "MDN — Array.prototype.with()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/with"
+        }
+      ]
+    },
+    {
+      "heading": "reduce: 集約の万能ツール、ただし読みづらさに注意",
+      "body": "`reduce((acc, cur) => ..., initial)` は配列を 1 つの値に集約する強力なメソッドです。合計・最大値・グルーピング・オブジェクト生成と用途は広いですが、`acc` の構造が複雑になるほど他人が読むコストが上がります。\n\n単純な合計なら map → +、グルーピングなら `Object.groupBy`（Baseline 入り）、key→value 変換なら Map のコンストラクタが読みやすいことが多く、reduce は『これしか書けない』場面に絞るのが現実的です。",
+      "code": {
+        "lang": "ts",
+        "src": "const xs = [{ tag: 'a', n: 1 }, { tag: 'a', n: 2 }, { tag: 'b', n: 3 }]\n\n// reduce で集計\nconst sumByTag = xs.reduce((acc, x) => {\n  acc[x.tag] = (acc[x.tag] ?? 0) + x.n\n  return acc\n}, {} as Record<string, number>)\n\n// Object.groupBy で見やすく\nconst grouped = Object.groupBy(xs, (x) => x.tag)"
+      },
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.reduce()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce"
+        },
+        {
+          "title": "MDN — Object.groupBy()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/groupBy"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコード実行後、xs の値は？",
+      "code": {
+        "lang": "ts",
+        "src": "const xs = [3, 1, 2]\nconst ys = xs.sort()\nys.push(4)"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "[3, 1, 2]",
+          "isCorrect": false,
+          "explanation": "sort は破壊的で xs 自体を並び替える。"
+        },
+        {
+          "id": "b",
+          "label": "[1, 2, 3, 4]",
+          "isCorrect": true,
+          "explanation": "正解。sort は xs を [1,2,3] に変更、戻り値 ys は xs と同じ参照。push でさらに 4 が加わり xs も [1,2,3,4] になる。"
+        },
+        {
+          "id": "c",
+          "label": "[1, 2, 3]",
+          "isCorrect": false,
+          "explanation": "ys と xs は同じ参照なので push も xs に反映される。"
+        },
+        {
+          "id": "d",
+          "label": "[3, 1, 2, 4]",
+          "isCorrect": false,
+          "explanation": "sort で並び替えが先に走っている。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.sort()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコード実行後、xs の値は？",
+      "code": {
+        "lang": "ts",
+        "src": "const xs = [3, 1, 2]\nconst ys = xs.toSorted()\nys[0] = 999"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "[3, 1, 2]",
+          "isCorrect": true,
+          "explanation": "正解。toSorted は非破壊。元の xs は変わらず、ys は別配列。"
+        },
+        {
+          "id": "b",
+          "label": "[999, 2, 3]",
+          "isCorrect": false,
+          "explanation": "それは ys の値。xs は元のまま。"
+        },
+        {
+          "id": "c",
+          "label": "[1, 2, 3]",
+          "isCorrect": false,
+          "explanation": "toSorted は xs を書き換えない。"
+        },
+        {
+          "id": "d",
+          "label": "[999, 1, 2]",
+          "isCorrect": false,
+          "explanation": "xs は完全に元のまま。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.toSorted()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/toSorted"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "Vue で props として渡された配列を昇順に表示したい。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "computed(() => props.items.toSorted((a, b) => a - b))",
+          "isCorrect": true,
+          "explanation": "正解。toSorted は非破壊なので props を直接変更せずに済む。computed なので再計算もキャッシュされる。"
+        },
+        {
+          "id": "b",
+          "label": "computed(() => props.items.sort((a, b) => a - b))",
+          "isCorrect": false,
+          "explanation": "sort は破壊的。親が渡した配列を書き換えてしまい、データフローを壊す。"
+        },
+        {
+          "id": "c",
+          "label": "props.items.sort((a, b) => a - b) を setup 本体で 1 回呼ぶ",
+          "isCorrect": false,
+          "explanation": "props を変更するうえ、items が変わったときに追従しない。"
+        },
+        {
+          "id": "d",
+          "label": "watch(props.items, (v) => { v.sort(...) }) を書く",
+          "isCorrect": false,
+          "explanation": "watch のソース指定も誤っている上、結局 props を破壊している。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.toSorted()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/toSorted"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のうち、xs から条件に合う要素だけを集めて新しい配列を作る正しいメソッドは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "xs.filter(fn)",
+          "isCorrect": true,
+          "explanation": "正解。filter は非破壊で条件に合う要素の新しい配列を返す。"
+        },
+        {
+          "id": "b",
+          "label": "xs.find(fn)",
+          "isCorrect": false,
+          "explanation": "find は最初の 1 件だけを返す。複数該当の収集には使えない。"
+        },
+        {
+          "id": "c",
+          "label": "xs.some(fn)",
+          "isCorrect": false,
+          "explanation": "some は boolean を返す（1 つでも該当するか）。"
+        },
+        {
+          "id": "d",
+          "label": "xs.every(fn)",
+          "isCorrect": false,
+          "explanation": "every も boolean を返す（全件該当するか）。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Array.prototype.filter()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "map / filter / slice / concat は非破壊。push / sort / reverse / splice は破壊的",
+      "ES2023 で toSorted / toReversed / toSpliced / with の非破壊版が追加された",
+      "props / reactive 状態に対する派生表示は非破壊メソッド + computed で書く",
+      "reduce は強力だが読みづらい。groupBy 等の専用 API が使えるなら優先する"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Array reference",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array"
+      },
+      {
+        "title": "MDN — Array — Copying vs mutating methods",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array#copying_methods_and_mutating_methods"
+      }
+    ]
+  }
+}

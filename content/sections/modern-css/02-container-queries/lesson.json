@@ -1,0 +1,254 @@
+{
+  "id": "modern-css.container-queries",
+  "version": 1,
+  "title": "コンテナクエリ（@container）",
+  "estimatedMinutes": 6,
+  "tags": ["css", "container-queries", "responsive"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "親要素の幅でレイアウトを切り替える",
+    "body": "メディアクエリ（@media）は『ビューポート全体の幅』でしか分岐できませんでした。コンテナクエリ（@container）は『親要素の幅』で条件分岐できる仕組みで、サイドバー内のカードと本文内のカードで別レイアウトを当てる、といったコンポーネント自律的なレスポンシブが書けます。Chrome / Firefox / Safari いずれも安定して使えます。"
+  },
+
+  "explanations": [
+    {
+      "heading": "container-type と @container",
+      "body": "コンテナクエリを使うには、まず親要素を『コンテナ』として登録します。\n\n- `container-type: inline-size`: インライン軸（横幅）の問合せができる。多くの場面でこれで十分\n- `container-type: size`: 両軸（縦横）で問合せできる。コンテナの内側コンテンツが外側のサイズに影響しなくなるので注意\n- `container-type: normal`: コンテナとして使わない（既定）\n\nその上で `@container (min-width: 400px) { ... }` のように書くと、最寄りのコンテナがその条件を満たしたときだけスタイルが適用されます。",
+      "code": {
+        "lang": "css",
+        "src": ".card-wrap {\n  container-type: inline-size;\n}\n\n.card { display: block; }\n\n@container (min-width: 400px) {\n  .card {\n    display: grid;\n    grid-template-columns: 120px 1fr;\n  }\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — Using container queries",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries"
+        },
+        {
+          "title": "MDN — container-type",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/container-type"
+        }
+      ]
+    },
+    {
+      "heading": "container-name で複数コンテナを使い分ける",
+      "body": "ネストしたコンテナを使い分けたいときは `container-name: card` のように名前を付け、`@container card (min-width: 400px)` で参照します。複数の祖先がコンテナのとき、自動では『最寄りのコンテナ』が選ばれますが、名前を指定すれば任意の祖先コンテナを対象にできます。\n\nショートハンドの `container: card / inline-size` は `container-name: card` と `container-type: inline-size` をまとめた書き方です。",
+      "code": {
+        "lang": "css",
+        "src": ".sidebar { container: sidebar / inline-size; }\n.main    { container: main / inline-size; }\n\n@container sidebar (min-width: 200px) {\n  .card { padding: 8px; }\n}\n@container main (min-width: 600px) {\n  .card { padding: 24px; }\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — container-name",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/container-name"
+        }
+      ]
+    },
+    {
+      "heading": "コンテナクエリ単位（cqw / cqi / cqh）",
+      "body": "コンテナクエリは長さ単位も提供します。`cqw` はコンテナ幅の 1%、`cqi` はインライン軸の 1%、`cqh` はブロック軸の 1%、など。ビューポート単位（vw / vh）と違って『最寄りのコンテナ』を基準にできるので、コンポーネント内のフォントサイズや余白をコンテナのサイズで滑らかに連動させたい場面で強力です。\n\nたとえば `font-size: clamp(14px, 4cqi, 20px)` のように書けば、コンテナの幅に応じて 14〜20px の範囲でスケールします。",
+      "code": {
+        "lang": "css",
+        "src": ".card-wrap { container-type: inline-size; }\n.card h2 {\n  font-size: clamp(14px, 4cqi, 20px);\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — Container query length units",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/length#container_query_length_units"
+        }
+      ]
+    },
+    {
+      "heading": "コンテナを設定する位置に注意",
+      "body": "コンテナクエリは『そのコンテナ自身のスタイル』ではなく『コンテナの子孫のスタイル』に影響します。つまり `@container` の対象は子孫要素で、コンテナ自体のサイズを変えることはできません。\n\nまた、`container-type: size` を付けると **コンテンツが親のサイズを決める正常な流れ** が止まり、親に明示的な高さがないと潰れます。基本は `inline-size` を使い、`size` は本当に必要なときだけ使うのが安全です。",
+      "code": {
+        "lang": "css",
+        "src": "/* ❌ コンテナ自身のサイズを @container で変えようとしても効かない */\n@container (min-width: 400px) {\n  .card-wrap { background: red; } /* これは指定したいなら別の方法 */\n}\n\n/* ✅ コンテナの子孫を変える */\n@container (min-width: 400px) {\n  .card { background: red; }\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — Using container queries",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次の CSS で .card に grid が適用される条件として正しいのは？",
+      "code": {
+        "lang": "css",
+        "src": ".wrap { container-type: inline-size; }\n@container (min-width: 400px) {\n  .card { display: grid; }\n}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "ビューポートの幅が 400px 以上のとき",
+          "isCorrect": false,
+          "explanation": "それは @media の挙動。@container はコンテナの幅を見る。"
+        },
+        {
+          "id": "b",
+          "label": ".wrap の幅が 400px 以上のとき",
+          "isCorrect": true,
+          "explanation": "正解。container-type: inline-size を持つ最寄りの祖先（.wrap）の横幅で判定される。"
+        },
+        {
+          "id": "c",
+          "label": ".card 自身の幅が 400px 以上のとき",
+          "isCorrect": false,
+          "explanation": "コンテナクエリは『コンテナの子孫』を対象にする。自身ではなく祖先の幅を見る。"
+        },
+        {
+          "id": "d",
+          "label": "ルート html の幅が 400px 以上のとき",
+          "isCorrect": false,
+          "explanation": "html 全体ではなく container-type を持つ最寄り祖先が基準。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — @container",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/@container"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "design-judgment-4choice",
+      "prompt": "同じ Card コンポーネントを『広い本文』『狭いサイドバー』に置き、それぞれ別レイアウトを当てたい。最も適切な実装は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "親要素に container-type: inline-size を付け、Card 側で @container ルールを書く",
+          "isCorrect": true,
+          "explanation": "正解。コンテナクエリの典型用途。配置先によって自動的に切り替わるのでコンポーネントが自律的になる。"
+        },
+        {
+          "id": "b",
+          "label": "props で variant を渡して Card 内で分岐",
+          "isCorrect": false,
+          "explanation": "動くが、レイアウト適応をプログラマが手動指定することになり、配置先と表示の整合性が崩れやすい。"
+        },
+        {
+          "id": "c",
+          "label": "ビューポートの @media で書き分ける",
+          "isCorrect": false,
+          "explanation": "ビューポート幅と『カードが置かれた場所の幅』は一致しない。狭いサイドバーでもビューポートは広い場合がある。"
+        },
+        {
+          "id": "d",
+          "label": "JS で親要素の幅を ResizeObserver で観測し、class を付け替える",
+          "isCorrect": false,
+          "explanation": "コンテナクエリが標準で動く今、JS で再実装する必要はない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "web.dev — Container queries",
+          "url": "https://web.dev/articles/css-container-queries"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "code-reading-4choice",
+      "prompt": "次の CSS の cqi 単位は何を基準にする？",
+      "code": {
+        "lang": "css",
+        "src": ".wrap { container-type: inline-size; }\n.card h2 { font-size: 5cqi; }"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "ビューポートのインライン軸の 1%",
+          "isCorrect": false,
+          "explanation": "それは vi。cqi はコンテナ基準。"
+        },
+        {
+          "id": "b",
+          "label": "最寄りのコンテナのインライン軸の 1%",
+          "isCorrect": true,
+          "explanation": "正解。cqi はコンテナクエリ用の長さ単位。最寄りのコンテナのインライン軸（通常は横幅）の 1%。"
+        },
+        {
+          "id": "c",
+          "label": "h2 自身の幅の 1%",
+          "isCorrect": false,
+          "explanation": "自身の幅ではなくコンテナの幅。"
+        },
+        {
+          "id": "d",
+          "label": "ルートフォントサイズの 1%",
+          "isCorrect": false,
+          "explanation": "それは rem 系の挙動。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — Container query length units",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/length#container_query_length_units"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "container-type: size を付けるとどんな副作用が起きる？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "副作用は無く、両軸で問合せできるようになるだけ",
+          "isCorrect": false,
+          "explanation": "両軸問合せのために containment が強くなり、子の高さがコンテナの高さに影響しなくなる。"
+        },
+        {
+          "id": "b",
+          "label": "コンテンツが親のサイズを決める通常の流れが止まり、明示的なサイズを持たないと潰れる",
+          "isCorrect": true,
+          "explanation": "正解。size は強い containment を伴う。高さが auto のままだとレイアウトが崩れる。"
+        },
+        {
+          "id": "c",
+          "label": "コンテナクエリが完全に無効になる",
+          "isCorrect": false,
+          "explanation": "むしろ両軸で有効。"
+        },
+        {
+          "id": "d",
+          "label": "ブラウザのレンダリングが停止する",
+          "isCorrect": false,
+          "explanation": "そのような挙動はない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — container-type",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/container-type"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "コンテナクエリは『親（祖先）コンテナの幅』で分岐できる仕組み",
+      "親に container-type: inline-size を付け、子孫に @container ルールを書く",
+      "cqi / cqw 等のコンテナクエリ単位で滑らかな連動が書ける",
+      "container-type: size は両軸対応だがコンテナのサイズが固定されるので注意"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — Container queries",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries"
+      },
+      {
+        "title": "web.dev — Container queries",
+        "url": "https://web.dev/articles/css-container-queries"
+      }
+    ]
+  }
+}

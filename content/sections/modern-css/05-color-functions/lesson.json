@@ -1,0 +1,250 @@
+{
+  "id": "modern-css.color-functions",
+  "version": 1,
+  "title": "新カラー関数（oklch / color-mix）",
+  "estimatedMinutes": 6,
+  "tags": ["css", "color"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "色を『計算して作る』時代",
+    "body": "従来は色を `#1cb0f6` のように 1 個ずつハードコードしていましたが、現代の CSS では `oklch()` で知覚的に均等な色を直接指定したり、`color-mix()` でベース色を混ぜて派生色を作れます。これにより『ベース色 → 軽い hover 色／無効化色／影』などを 1 つのトークンから派生できるようになり、テーマ管理がコンパクトになります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "oklch / oklab: 知覚的に均等な色空間",
+      "body": "`oklch(L C H)` は L（明度）、C（彩度）、H（色相）の 3 軸で色を指定します。HSL より人間の知覚に近い均等性があり、明度を上下したときの『同じくらい明るく見える』感覚と一致しやすいのが特徴です。\n\n`oklch(70% 0.15 230)` のように書きます。L は 0〜100%（または 0〜1）、C は 0〜0.4 程度、H は 0〜360 度。同じ L と C のまま H だけ変えれば『見た目の重みが同じカラーパレット』が作れます。",
+      "code": {
+        "lang": "css",
+        "src": ":root {\n  --primary: oklch(70% 0.18 230);\n  --success: oklch(70% 0.18 145);\n  --error:   oklch(65% 0.22 25);\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — oklch()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch"
+        },
+        {
+          "title": "web.dev — Color spaces and functions",
+          "url": "https://web.dev/articles/color-spaces-and-functions"
+        }
+      ]
+    },
+    {
+      "heading": "color-mix: 色を割合で混ぜる",
+      "body": "`color-mix(in <colorspace>, c1 X%, c2 Y%)` で 2 色を任意比率で混ぜられます。色空間に `oklch` や `oklab` を指定するのが推奨で、線形 RGB より自然な中間色が得られます。\n\n実務では『ベース色 + 透明度／白／黒を混ぜて派生色を生成』に使われます。トークンに base 色だけ置き、hover / active / disabled 等をそこから派生させればパレットの保守が楽になります。",
+      "code": {
+        "lang": "css",
+        "src": ":root {\n  --primary: oklch(70% 0.18 230);\n  --primary-hover: color-mix(in oklab, var(--primary), black 12%);\n  --primary-soft:  color-mix(in oklab, var(--primary), white 70%);\n  --primary-30:    color-mix(in oklab, var(--primary) 30%, transparent);\n}\n\n.btn { background: var(--primary); }\n.btn:hover { background: var(--primary-hover); }"
+      },
+      "sources": [
+        {
+          "title": "MDN — color-mix()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix"
+        }
+      ]
+    },
+    {
+      "heading": "currentColor との組み合わせ",
+      "body": "`color-mix(in oklab, currentColor 20%, transparent)` のように `currentColor` を混ぜると、テキスト色を基準に半透明の枠線や背景を派生できます。Vue / Nuxt のコンポーネントで親から `color` を渡せば、内部の border や bg がそのトーンで自動的に派生します。\n\nテーマやダークモード切替時に、各コンポーネントが追随できる構成を作るのに有効です。",
+      "code": {
+        "lang": "css",
+        "src": ".chip {\n  color: var(--primary);\n  border: 1px solid color-mix(in oklab, currentColor 30%, transparent);\n  background: color-mix(in oklab, currentColor 10%, transparent);\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — currentColor keyword",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value#currentcolor_keyword"
+        }
+      ]
+    },
+    {
+      "heading": "色域: P3 / sRGB の扱い",
+      "body": "`oklch()` で指定できる色は sRGB の範囲を超えることもあります（広色域）。広色域（P3）対応ディスプレイでは表示できますが、それ以外のディスプレイでは sRGB に丸められます（gamut mapping）。\n\nブランドカラーの厳密さが求められる場面では `color(display-p3 ...)` で明示し、互換性のためのフォールバックを併記する手があります。",
+      "code": {
+        "lang": "css",
+        "src": ".brand {\n  background: #ff6a00; /* fallback (sRGB) */\n  background: color(display-p3 1 0.42 0); /* P3 ディスプレイ */\n}"
+      },
+      "sources": [
+        {
+          "title": "MDN — color() function",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "oklch(70% 0.15 230) の各値の意味として正しいのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "明度 / 彩度 / 色相",
+          "isCorrect": true,
+          "explanation": "正解。L = 明度、C = 彩度、H = 色相（角度）。"
+        },
+        {
+          "id": "b",
+          "label": "赤 / 緑 / 青",
+          "isCorrect": false,
+          "explanation": "それは rgb()。oklch は知覚的色空間。"
+        },
+        {
+          "id": "c",
+          "label": "色相 / 彩度 / 明度",
+          "isCorrect": false,
+          "explanation": "順序は L, C, H。HSL と勘違いしやすい。"
+        },
+        {
+          "id": "d",
+          "label": "明度 / 透明度 / 色相",
+          "isCorrect": false,
+          "explanation": "C は彩度。透明度は別パラメータ（/ alpha）。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — oklch()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch"
+        }
+      ]
+    },
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "color-mix(in oklab, var(--primary), white 70%) はどんな色になる？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "primary をベースに白を 70% 混ぜた、淡い色",
+          "isCorrect": true,
+          "explanation": "正解。第 2 色の割合が 70% なので結果は白寄りの淡いトーンになる。"
+        },
+        {
+          "id": "b",
+          "label": "primary が 70%、白が 30% の濃い色",
+          "isCorrect": false,
+          "explanation": "比率は逆。指定された 70% は white 側の割合。"
+        },
+        {
+          "id": "c",
+          "label": "primary に 70% の不透明度を掛けた色",
+          "isCorrect": false,
+          "explanation": "それは alpha の調整。color-mix は色の混合。"
+        },
+        {
+          "id": "d",
+          "label": "white そのまま",
+          "isCorrect": false,
+          "explanation": "primary 側も 30% 残るので白そのままにはならない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — color-mix()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix"
+        }
+      ]
+    },
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "ボタンのベース色から hover / active / disabled / focus ring 色を派生させたい。最も保守性が高い設計は？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "ベース色 1 つを定義し、color-mix で派生色を変数化する",
+          "isCorrect": true,
+          "explanation": "正解。ベースを変えれば派生も自動で追随する。1 箇所変更だけでテーマが揃う。"
+        },
+        {
+          "id": "b",
+          "label": "派生色も全部別の HEX で個別に手書きする",
+          "isCorrect": false,
+          "explanation": "テーマ変更時に毎回 4 色手動更新が必要。保守性が低い。"
+        },
+        {
+          "id": "c",
+          "label": "Sass のメイクツールで生成し、生成後の HEX を CSS にコピーする",
+          "isCorrect": false,
+          "explanation": "ランタイムでテーマ切替（ライト/ダーク）に追随できない。"
+        },
+        {
+          "id": "d",
+          "label": "JS で色計算してインラインスタイルで適用する",
+          "isCorrect": false,
+          "explanation": "CSS だけで成立する用途。JS を持ち込むと過剰。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "web.dev — Color spaces and functions",
+          "url": "https://web.dev/articles/color-spaces-and-functions"
+        }
+      ]
+    },
+    {
+      "id": "ex4",
+      "type": "code-reading-4choice",
+      "prompt": "次のうち、色のアルファ（不透明度）を 30% に変えた値を作る記法として最も素直なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "color-mix(in oklab, var(--primary) 30%, transparent)",
+          "isCorrect": true,
+          "explanation": "正解。第 2 色を transparent にすると不透明度の調整として使える。oklab で混ぜれば自然な遷移になる。"
+        },
+        {
+          "id": "b",
+          "label": "var(--primary).opacity(0.3)",
+          "isCorrect": false,
+          "explanation": "そのような CSS の構文は無い。"
+        },
+        {
+          "id": "c",
+          "label": "rgba(var(--primary), 0.3)",
+          "isCorrect": false,
+          "explanation": "rgba は数値リストを期待しており、CSS 変数の色をそのまま展開できない。"
+        },
+        {
+          "id": "d",
+          "label": "opacity: 0.3 を要素全体に当てる",
+          "isCorrect": false,
+          "explanation": "要素全体（文字含む）が半透明になる。色だけ薄める用途とは別。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "MDN — color-mix() with transparent",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "oklch は『明度・彩度・色相』を直感的に扱える知覚均等な色空間",
+      "color-mix で 2 色を割合で混ぜ、派生色（hover / soft / 半透明）を 1 つのトークンから生成できる",
+      "currentColor と組み合わせると、文字色基準で枠線・背景を自動派生できる",
+      "P3 を使うと広色域ディスプレイで鮮やかな色が出せるが、sRGB フォールバックを併記する"
+    ],
+    "furtherReading": [
+      {
+        "title": "MDN — oklch()",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch"
+      },
+      {
+        "title": "MDN — color-mix()",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix"
+      },
+      {
+        "title": "web.dev — Color spaces and functions",
+        "url": "https://web.dev/articles/color-spaces-and-functions"
+      }
+    ]
+  }
+}
