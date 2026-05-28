@@ -1,0 +1,55 @@
+/* 3D shadow buttons (Duolingo-style) */
+
+button.primary,
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: var(--space-3) var(--space-6);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  color: #ffffff;
+  background: var(--color-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-button);
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.08s ease;
+}
+
+button.primary:hover,
+.button-primary:hover {
+  filter: brightness(1.05);
+}
+
+button.primary:active,
+.button-primary:active {
+  transform: translateY(4px);
+  box-shadow: var(--shadow-button-pressed);
+}
+
+button.primary:disabled,
+.button-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: var(--shadow-button);
+}
+
+button.primary:focus-visible,
+.button-primary:focus-visible {
+  outline: 3px solid var(--color-primary-dark);
+  outline-offset: 2px;
+}
+
+.surface {
+  background: var(--color-surface);
+}
+
+.app-container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
