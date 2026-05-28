@@ -1,0 +1,251 @@
+{
+  "id": "vue-reactivity.ref-vs-reactive",
+  "version": 1,
+  "title": "ref と reactive の使い分け",
+  "estimatedMinutes": 6,
+  "tags": ["vue3", "reactivity"],
+  "prerequisites": [],
+
+  "intro": {
+    "headline": "なぜ ref と reactive が両方あるのか",
+    "body": "Vue 3 ではリアクティブな値を作る入口が `ref()` と `reactive()` の 2 つあります。両方とも「変更が自動的にテンプレートや computed に反映される」点では同じですが、扱える型・再代入の挙動・テンプレ内での書き方が異なります。実務では「どっちを使えば良いか」で迷う最初の壁になりやすく、誤用するとリアクティビティが切れて値が更新されない事故につながります。"
+  },
+
+  "explanations": [
+    {
+      "heading": "ref はプリミティブ用、reactive はオブジェクト用",
+      "body": "`ref()` は任意の値を `{ value: ... }` 風のラッパに包んで返します。`.value` 経由で読み書きします。プリミティブ（number / string / boolean 等）は Proxy で包めないため、`reactive()` ではなく `ref()` が必要です。\n\n`reactive()` はオブジェクトや配列を Proxy で包み、プロパティアクセスを直接リアクティブにします。`.value` は要りません。プリミティブを `reactive` で包むことはできません。",
+      "code": {
+        "lang": "ts",
+        "src": "const count = ref(0)          // OK: プリミティブ → ref\nconst state = reactive({ n: 0 })  // OK: オブジェクト → reactive\nconst broken = reactive(0)    // ❌: プリミティブを reactive で包めない（warn が出る）"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Reactivity Fundamentals",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html"
+        },
+        {
+          "title": "Vue.js — reactive()",
+          "url": "https://vuejs.org/api/reactivity-core.html#reactive"
+        }
+      ]
+    },
+    {
+      "heading": "reactive は再代入で壊れる",
+      "body": "`reactive` が返すのは Proxy オブジェクトです。`let state = reactive({...})` として後で `state = ...` のように再代入すると、Proxy ごと別の参照に差し変わり、テンプレートが参照していた元の Proxy への変更通知は届きません。`ref` は `.value` を書き換えるだけなので、この問題は起きません。\n\n配列やオブジェクトを丸ごと入れ替えたい場合は `ref([])` や `ref({})` を使うか、`reactive` 側で内側のプロパティだけを書き換えるのが原則です。",
+      "code": {
+        "lang": "ts",
+        "src": "// ❌ reactive の再代入はリアクティビティを壊す\nlet state = reactive({ list: [] as number[] })\nstate = reactive({ list: [1, 2, 3] })  // template は元の Proxy を見ているので更新されない\n\n// ✅ 中身を書き換える / または ref を使う\nstate.list = [1, 2, 3]\n\nconst stateRef = ref({ list: [] as number[] })\nstateRef.value = { list: [1, 2, 3] }   // OK"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Limitations of reactive()",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#limitations-of-reactive"
+        }
+      ]
+    },
+    {
+      "heading": "テンプレートでは ref が自動 unwrap される",
+      "body": "テンプレート内で「トップレベルの ref」は `.value` を書かずに直接参照できます（自動 unwrap）。ただし配列やオブジェクトの中に入った ref はトップレベル扱いされず、unwrap されません。`<script setup>` の `return` に頼らず top-level に置くのが最も素直です。",
+      "code": {
+        "lang": "vue",
+        "src": "<script setup lang=\"ts\">\nconst count = ref(0)\nconst nested = { inner: ref(0) }  // テンプレでは inner.value と書く必要がある\n</script>\n\n<template>\n  <p>{{ count }}</p>            <!-- OK: 自動 unwrap -->\n  <p>{{ nested.inner.value }}</p> <!-- 入れ子なので .value が必要 -->\n</template>"
+      },
+      "sources": [
+        {
+          "title": "Vue.js — Ref Unwrapping in Templates",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#ref-unwrapping-in-templates"
+        }
+      ]
+    }
+  ],
+
+  "exercises": [
+    {
+      "id": "ex1",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードで console.log は何を出力する？",
+      "code": {
+        "lang": "ts",
+        "src": "import { reactive } from 'vue'\n\nconst s = reactive({ n: 1 })\nconst r = s\nr.n = 2\nconsole.log(s.n)"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "1",
+          "isCorrect": false,
+          "explanation": "r は s と同一参照（同じ Proxy）なので、r 経由の代入は s からも観測できる。1 にはならない。"
+        },
+        {
+          "id": "b",
+          "label": "2",
+          "isCorrect": true,
+          "explanation": "正解。reactive が返すのは Proxy で、r = s は Proxy への別名にすぎない。r.n への代入は同じ Proxy のセットトラップを通り、s.n も 2 を返す。"
+        },
+        {
+          "id": "c",
+          "label": "undefined",
+          "isCorrect": false,
+          "explanation": "n はオブジェクトに存在するキーで、reactive() は元のキーをそのまま公開する。undefined にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "実行時エラー",
+          "isCorrect": false,
+          "explanation": "型エラーも実行時エラーも起きない。reactive のプロパティ書き換えは通常の代入と同じ構文で行える。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — reactive()",
+          "url": "https://vuejs.org/api/reactivity-core.html#reactive"
+        }
+      ]
+    },
+
+    {
+      "id": "ex2",
+      "type": "code-reading-4choice",
+      "prompt": "次のコードでボタンを 1 回押した直後、画面に表示される数字は？",
+      "code": {
+        "lang": "vue",
+        "src": "<script setup lang=\"ts\">\nimport { reactive } from 'vue'\nlet state = reactive({ count: 0 })\nfunction inc() {\n  state = reactive({ count: state.count + 1 })\n}\n</script>\n\n<template>\n  <p>{{ state.count }}</p>\n  <button @click=\"inc\">+1</button>\n</template>"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "0",
+          "isCorrect": true,
+          "explanation": "正解。inc() は state を新しい Proxy に再代入するが、テンプレートは初回レンダー時に取得した元の Proxy を依存追跡している。新しい Proxy への変更は通知されないため、画面は 0 のまま。"
+        },
+        {
+          "id": "b",
+          "label": "1",
+          "isCorrect": false,
+          "explanation": "反映されているように見えるが、reactive の再代入では更新トリガが走らない。state.count++ のように内側を書き換えれば 1 になる。"
+        },
+        {
+          "id": "c",
+          "label": "NaN",
+          "isCorrect": false,
+          "explanation": "state.count は number で、+ 1 もそのまま number。NaN にはならない。"
+        },
+        {
+          "id": "d",
+          "label": "実行時エラー",
+          "isCorrect": false,
+          "explanation": "再代入自体はエラーではない（let なので可能）。ただしリアクティビティは切れる。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Limitations of reactive()",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#limitations-of-reactive"
+        }
+      ]
+    },
+
+    {
+      "id": "ex3",
+      "type": "design-judgment-4choice",
+      "prompt": "フォームの入力値（文字列 1 つ）を持つときに最も適切なのは？",
+      "choices": [
+        {
+          "id": "a",
+          "label": "const name = ref('')",
+          "isCorrect": true,
+          "explanation": "正解。プリミティブを単体で持つ場合は ref が公式推奨。.value で書き換えやすく、テンプレ内では自動 unwrap される。"
+        },
+        {
+          "id": "b",
+          "label": "const name = reactive({ value: '' })",
+          "isCorrect": false,
+          "explanation": "動作はするが、プリミティブを reactive で包む利点が薄く、name.value という冗長なアクセスが必要になる。"
+        },
+        {
+          "id": "c",
+          "label": "let name = ''",
+          "isCorrect": false,
+          "explanation": "ただの変数はリアクティブではない。書き換えてもテンプレに反映されない。"
+        },
+        {
+          "id": "d",
+          "label": "const name = computed(() => '')",
+          "isCorrect": false,
+          "explanation": "computed は派生値用で、初期値の宣言や双方向バインディングには使えない（setter なしの computed は書き込み不可）。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Reactivity Fundamentals (ref)",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#declaring-reactive-state"
+        }
+      ]
+    },
+
+    {
+      "id": "ex4",
+      "type": "design-judgment-4choice",
+      "prompt": "API から取得した配列を「丸ごと差し替え」したいときに最も適切なのは？",
+      "code": {
+        "lang": "ts",
+        "src": "// データ取得後に「全部入れ替える」が要件\nconst items = /* ここに何を置く？ */\nasync function load() {\n  const next = await fetchItems()\n  // ここで items を更新したい\n}"
+      },
+      "choices": [
+        {
+          "id": "a",
+          "label": "items = ref<Item[]>([]) として items.value = next で代入",
+          "isCorrect": true,
+          "explanation": "正解。ref なら .value への代入で参照ごと差し替えてもリアクティビティが維持される。「丸ごと差し替え」の要件に最も素直。"
+        },
+        {
+          "id": "b",
+          "label": "items = reactive<Item[]>([]) として items = next で代入",
+          "isCorrect": false,
+          "explanation": "reactive の再代入は Proxy ごと差し変わるため、依存追跡が切れて画面が更新されない典型的なアンチパターン。"
+        },
+        {
+          "id": "c",
+          "label": "items = reactive<Item[]>([]) として items.splice(0, items.length, ...next)",
+          "isCorrect": false,
+          "explanation": "動作はするが、Proxy のまま中身を入れ替える書き方として冗長。意図が伝わりにくく、A の ref のほうが「丸ごと差し替え」の意図を素直に表現できる。"
+        },
+        {
+          "id": "d",
+          "label": "let items: Item[] = []  として items = next で代入",
+          "isCorrect": false,
+          "explanation": "リアクティブではない素の配列なので、テンプレートには反映されない。"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Vue.js — Limitations of reactive()",
+          "url": "https://vuejs.org/guide/essentials/reactivity-fundamentals.html#limitations-of-reactive"
+        },
+        {
+          "title": "Vue.js — ref()",
+          "url": "https://vuejs.org/api/reactivity-core.html#ref"
+        }
+      ]
+    }
+  ],
+
+  "summary": {
+    "keypoints": [
+      "プリミティブは ref、オブジェクト/配列は reactive または ref(オブジェクト)",
+      "reactive は再代入で Proxy 参照が切れる。中身を書き換えるか ref を使う",
+      "テンプレ内ではトップレベルの ref は自動 unwrap される。入れ子は .value が必要",
+      "「丸ごと差し替え」が必要なら ref、「内側のプロパティを書き換える」中心なら reactive が素直"
+    ],
+    "furtherReading": [
+      {
+        "title": "Vue.js — Reactivity in Depth",
+        "url": "https://vuejs.org/guide/extras/reactivity-in-depth.html"
+      },
+      {
+        "title": "Vue.js Style Guide",
+        "url": "https://vuejs.org/style-guide/"
+      }
+    ]
+  }
+}
