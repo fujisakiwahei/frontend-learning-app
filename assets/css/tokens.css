@@ -1,0 +1,36 @@
+:root {
+  --color-primary: #1cb0f6;
+  --color-primary-dark: #0e84bd;
+  --color-success: #58cc02;
+  --color-error: #ff4b4b;
+  --color-accent: #ffc800;
+  --color-bg: #ffffff;
+  --color-surface: #f7f7f7;
+  --color-text: #3c3c3c;
+  --color-text-muted: #777777;
+
+  --font-sans: "Inter", "Noto Sans JP", system-ui, sans-serif;
+
+  --fs-display: 32px;
+  --fs-h1: 24px;
+  --fs-h2: 20px;
+  --fs-body: 16px;
+  --fs-label: 13px;
+
+  --fw-bold: 800;
+  --fw-regular: 400;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --shadow-button: 0 4px 0 var(--color-primary-dark);
+  --shadow-button-pressed: 0 0 0 var(--color-primary-dark);
+}
