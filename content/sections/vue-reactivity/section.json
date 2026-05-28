@@ -1,0 +1,13 @@
+{
+  "id": "vue-reactivity",
+  "title": "Vue 3 リアクティビティ基礎",
+  "description": "ref と reactive の使い分け、computed と watch、ライフサイクルと SSR 境界、テンプレート refs、リアクティビティを壊すアンチパターンを扱う。",
+  "order": 1,
+  "lessons": [
+    "01-ref-vs-reactive",
+    "02-computed-vs-watch",
+    "03-lifecycle",
+    "04-template-refs",
+    "05-anti-patterns"
+  ]
+}
